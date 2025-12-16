@@ -160,48 +160,37 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _getItemColor(ItemModel item) {
+  Color _getStatusColor(ItemModel item) {
     // Check labour card expiry only for employees
     if (item.isCompany != true) {
       if (item.isExpired) {
-        return Colors.red.shade100;
+        return const Color(0xFFEF4444); // Red
       } else if (item.isExpiringWithinDays(5)) {
-        return Colors.orange.shade100;
+        return const Color(0xFFF59E0B); // Orange
       } else if (item.isExpiringWithinDays(15)) {
-        return Colors.yellow.shade100;
+        return const Color(0xFFFBBF24); // Yellow
       }
     }
     // Check visa expiry for all
     if (item.isVisaExpired) {
-      return Colors.red.shade100;
+      return const Color(0xFFEF4444);
     } else if (item.isVisaExpiringWithinDays(5)) {
-      return Colors.orange.shade100;
+      return const Color(0xFFF59E0B);
     } else if (item.isVisaExpiringWithinDays(15)) {
-      return Colors.yellow.shade100;
+      return const Color(0xFFFBBF24);
     }
-    return Colors.white;
+    return const Color(0xFF10B981); // Green
   }
 
-  IconData _getItemIcon(ItemModel item) {
+  IconData _getStatusIcon(ItemModel item) {
     final hasLabourCardIssue = item.isCompany != true && item.isExpired;
     if (hasLabourCardIssue || item.isVisaExpired) {
-      return Icons.error;
+      return Icons.error_outline_rounded;
     } else if ((item.isCompany != true && item.isExpiringWithinDays(5)) ||
         item.isVisaExpiringWithinDays(5)) {
-      return Icons.warning;
+      return Icons.warning_amber_rounded;
     }
-    return Icons.check_circle;
-  }
-
-  Color _getIconColor(ItemModel item) {
-    final hasLabourCardIssue = item.isCompany != true && item.isExpired;
-    if (hasLabourCardIssue || item.isVisaExpired) {
-      return Colors.red;
-    } else if ((item.isCompany != true && item.isExpiringWithinDays(5)) ||
-        item.isVisaExpiringWithinDays(5)) {
-      return Colors.orange;
-    }
-    return Colors.green;
+    return Icons.check_circle_outline_rounded;
   }
 
   // Trigger debug notifications manually
@@ -274,16 +263,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Sheetzy - Expiry Tracker'),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        title: const Text(
+          'Sheetzy',
+          style: TextStyle(
+            color: Color(0xFF1E293B),
+            fontWeight: FontWeight.w600,
+            fontSize: 20,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_active),
+            icon: const Icon(Icons.notifications_active_outlined),
+            color: const Color(0xFF64748B),
             tooltip: 'Trigger notifications (Debug)',
             onPressed: _triggerDebugNotifications,
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_outlined),
+            color: const Color(0xFF64748B),
             onPressed: () async {
               await Navigator.push(
                 context,
@@ -294,10 +295,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _loadItems();
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -308,7 +310,10 @@ class _HomeScreenState extends State<HomeScreen> {
             _loadItems();
           }
         },
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Item'),
+        backgroundColor: const Color(0xFF3B82F6),
+        elevation: 2,
       ),
     );
   }
@@ -321,19 +326,44 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_errorMessage != null && _items.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: Colors.red.shade400,
+                ),
+              ),
+              const SizedBox(height: 24),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
+                style: const TextStyle(fontSize: 16, color: Color(0xFF475569)),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadItems, child: const Text('Retry')),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loadItems,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82F6),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Retry'),
+              ),
             ],
           ),
         ),
@@ -345,11 +375,26 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.inbox_outlined,
+                size: 56,
+                color: Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
               'No items found',
-              style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF475569),
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -365,133 +410,250 @@ class _HomeScreenState extends State<HomeScreen> {
       onRefresh: _loadItems,
       child: ListView.builder(
         itemCount: _items.length,
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
           final item = _items[index];
-          return Card(
-            color: _getItemColor(item),
-            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            child: ListTile(
-              leading: Icon(_getItemIcon(item), color: _getIconColor(item)),
-              title: Text(
-                item.employeeCompany ?? item.no ?? 'No name',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (item.no != null) ...[
-                    const SizedBox(height: 4),
-                    Text('No: ${item.no}'),
-                  ],
-                  if (item.isCompany != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Type: ${item.isCompany == true ? 'Company' : 'Employee'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  // Show labour card expiry only for employees
-                  if (item.isCompany != true &&
-                      item.labourCardExpiry != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Labour card expires: ${app_date_utils.DateUtils.formatDateDisplay(item.labourCardExpiry!)}',
-                      style: TextStyle(
-                        color: item.isExpired
-                            ? Colors.red
-                            : item.isExpiringWithinDays(5)
-                            ? Colors.orange.shade700
-                            : Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    _buildDaysUntilExpiry(item, isVisa: false),
-                  ],
-                  if (item.visaExpiry != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Visa expires: ${app_date_utils.DateUtils.formatDateDisplay(item.visaExpiry!)}',
-                      style: TextStyle(
-                        color: item.isVisaExpired
-                            ? Colors.red
-                            : item.isVisaExpiringWithinDays(5)
-                            ? Colors.orange.shade700
-                            : Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    _buildDaysUntilExpiry(item, isVisa: true),
-                  ],
-                  if (item.contact != null && item.contact!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Contact: ${item.contact}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              isThreeLine: true,
-            ),
-          );
+          return _buildModernCard(item);
         },
       ),
     );
   }
 
-  Widget _buildDaysUntilExpiry(ItemModel item, {required bool isVisa}) {
+  Widget _buildModernCard(ItemModel item) {
+    final statusColor = _getStatusColor(item);
+    final statusIcon = _getStatusIcon(item);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Handle card tap if needed
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row
+                Row(
+                  children: [
+                    // Status indicator
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(statusIcon, color: statusColor, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    // Name and type
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.employeeCompany ?? item.no ?? 'No name',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          if (item.no != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              item.no!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Type badge
+                    if (item.isCompany != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: item.isCompany == true
+                              ? const Color(0xFF3B82F6).withOpacity(0.1)
+                              : const Color(0xFF8B5CF6).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item.isCompany == true ? 'Company' : 'Employee',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: item.isCompany == true
+                                ? const Color(0xFF3B82F6)
+                                : const Color(0xFF8B5CF6),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                // Expiry information
+                const SizedBox(height: 16),
+
+                // Labour card expiry (only for employees)
+                if (item.isCompany != true &&
+                    item.labourCardExpiry != null) ...[
+                  _buildExpiryRow(
+                    icon: Icons.badge_outlined,
+                    label: 'Labour Card',
+                    date: app_date_utils.DateUtils.formatDateDisplay(
+                      item.labourCardExpiry!,
+                    ),
+                    daysInfo: _getDaysText(item, isVisa: false),
+                    color: item.isExpired
+                        ? const Color(0xFFEF4444)
+                        : item.isExpiringWithinDays(5)
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF64748B),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Visa expiry
+                if (item.visaExpiry != null) ...[
+                  _buildExpiryRow(
+                    icon: Icons.travel_explore_outlined,
+                    label: 'Visa',
+                    date: app_date_utils.DateUtils.formatDateDisplay(
+                      item.visaExpiry!,
+                    ),
+                    daysInfo: _getDaysText(item, isVisa: true),
+                    color: item.isVisaExpired
+                        ? const Color(0xFFEF4444)
+                        : item.isVisaExpiringWithinDays(5)
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF64748B),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Contact info
+                if (item.contact != null && item.contact!.isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.phone_outlined,
+                        size: 16,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item.contact!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpiryRow({
+    required IconData icon,
+    required String label,
+    required String date,
+    required String daysInfo,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                date,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            daysInfo,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getDaysText(ItemModel item, {required bool isVisa}) {
     final days = isVisa ? item.visaDaysUntilExpiry : item.daysUntilExpiry;
-    if (days == null) return const SizedBox.shrink();
+    if (days == null) return '';
 
     final isExpired = isVisa ? item.isVisaExpired : item.isExpired;
-    final expiryType = isVisa ? 'visa' : 'labour card';
 
     if (isExpired) {
-      // Calculate days since expiry (positive number)
       final daysSinceExpiry = -days;
-      return Text(
-        '$expiryType expired $daysSinceExpiry day${daysSinceExpiry == 1 ? '' : 's'} ago',
-        style: const TextStyle(
-          color: Colors.red,
-          fontWeight: FontWeight.bold,
-          fontSize: 11,
-        ),
-      );
+      return 'Expired ${daysSinceExpiry}d ago';
     } else if (days == 0) {
-      return Text(
-        '$expiryType expires today!',
-        style: const TextStyle(
-          color: Colors.red,
-          fontWeight: FontWeight.bold,
-          fontSize: 11,
-        ),
-      );
-    } else if (days <= 5) {
-      return Text(
-        '$expiryType: $days day${days == 1 ? '' : 's'} until expiry',
-        style: TextStyle(
-          color: Colors.orange.shade700,
-          fontWeight: FontWeight.bold,
-          fontSize: 11,
-        ),
-      );
+      return 'Expires today';
+    } else if (days == 1) {
+      return '1 day left';
     } else {
-      return Text(
-        '$expiryType: $days day${days == 1 ? '' : 's'} until expiry',
-        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
-      );
+      return '$days days left';
     }
   }
 }
