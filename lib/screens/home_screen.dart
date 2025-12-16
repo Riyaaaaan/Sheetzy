@@ -161,29 +161,44 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Color _getItemColor(ItemModel item) {
-    if (item.isExpired) {
+    // Check labour card expiry only for employees
+    if (item.isCompany != true) {
+      if (item.isExpired) {
+        return Colors.red.shade100;
+      } else if (item.isExpiringWithinDays(5)) {
+        return Colors.orange.shade100;
+      } else if (item.isExpiringWithinDays(15)) {
+        return Colors.yellow.shade100;
+      }
+    }
+    // Check visa expiry for all
+    if (item.isVisaExpired) {
       return Colors.red.shade100;
-    } else if (item.isExpiringWithinDays(5)) {
+    } else if (item.isVisaExpiringWithinDays(5)) {
       return Colors.orange.shade100;
-    } else if (item.isExpiringWithinDays(15)) {
+    } else if (item.isVisaExpiringWithinDays(15)) {
       return Colors.yellow.shade100;
     }
     return Colors.white;
   }
 
   IconData _getItemIcon(ItemModel item) {
-    if (item.isExpired) {
+    final hasLabourCardIssue = item.isCompany != true && item.isExpired;
+    if (hasLabourCardIssue || item.isVisaExpired) {
       return Icons.error;
-    } else if (item.isExpiringWithinDays(5)) {
+    } else if ((item.isCompany != true && item.isExpiringWithinDays(5)) ||
+        item.isVisaExpiringWithinDays(5)) {
       return Icons.warning;
     }
     return Icons.check_circle;
   }
 
   Color _getIconColor(ItemModel item) {
-    if (item.isExpired) {
+    final hasLabourCardIssue = item.isCompany != true && item.isExpired;
+    if (hasLabourCardIssue || item.isVisaExpired) {
       return Colors.red;
-    } else if (item.isExpiringWithinDays(5)) {
+    } else if ((item.isCompany != true && item.isExpiringWithinDays(5)) ||
+        item.isVisaExpiringWithinDays(5)) {
       return Colors.orange;
     }
     return Colors.green;
@@ -215,7 +230,13 @@ class _HomeScreenState extends State<HomeScreen> {
         if (_sheetsService.isInitialized) {
           final items = await _sheetsService.readItems();
           for (final item in items) {
-            if (item.isExpiringWithinDays(5) && !item.isExpired) {
+            final hasLabourCardExpiring =
+                item.isCompany != true &&
+                item.isExpiringWithinDays(5) &&
+                !item.isExpired;
+            final hasVisaExpiring =
+                item.isVisaExpiringWithinDays(5) && !item.isVisaExpired;
+            if (hasLabourCardExpiring || hasVisaExpiring) {
               eligibleItems++;
             }
           }
@@ -353,30 +374,65 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListTile(
               leading: Icon(_getItemIcon(item), color: _getIconColor(item)),
               title: Text(
-                item.name,
+                item.employeeCompany ?? item.no ?? 'No name',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 4),
-                  Text('Category: ${item.category}'),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Expires: ${app_date_utils.DateUtils.formatDateDisplay(item.expiryDate)}',
-                    style: TextStyle(
-                      color: item.isExpired
-                          ? Colors.red
-                          : item.isExpiringWithinDays(5)
-                          ? Colors.orange.shade700
-                          : Colors.grey.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (item.notes.isNotEmpty) ...[
+                  if (item.no != null) ...[
+                    const SizedBox(height: 4),
+                    Text('No: ${item.no}'),
+                  ],
+                  if (item.isCompany != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      item.notes,
+                      'Type: ${item.isCompany == true ? 'Company' : 'Employee'}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  // Show labour card expiry only for employees
+                  if (item.isCompany != true &&
+                      item.labourCardExpiry != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Labour card expires: ${app_date_utils.DateUtils.formatDateDisplay(item.labourCardExpiry!)}',
+                      style: TextStyle(
+                        color: item.isExpired
+                            ? Colors.red
+                            : item.isExpiringWithinDays(5)
+                            ? Colors.orange.shade700
+                            : Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    _buildDaysUntilExpiry(item, isVisa: false),
+                  ],
+                  if (item.visaExpiry != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Visa expires: ${app_date_utils.DateUtils.formatDateDisplay(item.visaExpiry!)}',
+                      style: TextStyle(
+                        color: item.isVisaExpired
+                            ? Colors.red
+                            : item.isVisaExpiringWithinDays(5)
+                            ? Colors.orange.shade700
+                            : Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    _buildDaysUntilExpiry(item, isVisa: true),
+                  ],
+                  if (item.contact != null && item.contact!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Contact: ${item.contact}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -385,8 +441,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  _buildDaysUntilExpiry(item),
                 ],
               ),
               isThreeLine: true,
@@ -397,32 +451,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDaysUntilExpiry(ItemModel item) {
-    final days = item.daysUntilExpiry;
-    if (item.isExpired) {
+  Widget _buildDaysUntilExpiry(ItemModel item, {required bool isVisa}) {
+    final days = isVisa ? item.visaDaysUntilExpiry : item.daysUntilExpiry;
+    if (days == null) return const SizedBox.shrink();
+
+    final isExpired = isVisa ? item.isVisaExpired : item.isExpired;
+    final expiryType = isVisa ? 'visa' : 'labour card';
+
+    if (isExpired) {
       // Calculate days since expiry (positive number)
       final daysSinceExpiry = -days;
       return Text(
-        'Expired since $daysSinceExpiry day${daysSinceExpiry == 1 ? '' : 's'}',
-        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        '$expiryType expired $daysSinceExpiry day${daysSinceExpiry == 1 ? '' : 's'} ago',
+        style: const TextStyle(
+          color: Colors.red,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
       );
     } else if (days == 0) {
-      return const Text(
-        'Expires today!',
-        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+      return Text(
+        '$expiryType expires today!',
+        style: const TextStyle(
+          color: Colors.red,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
       );
     } else if (days <= 5) {
       return Text(
-        '$days day${days == 1 ? '' : 's'} until expiry',
+        '$expiryType: $days day${days == 1 ? '' : 's'} until expiry',
         style: TextStyle(
           color: Colors.orange.shade700,
           fontWeight: FontWeight.bold,
+          fontSize: 11,
         ),
       );
     } else {
       return Text(
-        '$days day${days == 1 ? '' : 's'} until expiry',
-        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+        '$expiryType: $days day${days == 1 ? '' : 's'} until expiry',
+        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
       );
     }
   }

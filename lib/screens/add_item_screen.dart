@@ -13,47 +13,54 @@ class AddItemScreen extends StatefulWidget {
 
 class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _categoryController = TextEditingController();
-  final _notesController = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
-  final List<String> _categories = [
-    'Food',
-    'Medicine',
-    'License',
-    'Subscription',
-    'Warranty',
-    'Other',
-  ];
-  String _selectedCategory = 'Other';
+  final _employeeCompanyController = TextEditingController();
+  final _contactController = TextEditingController();
+  DateTime? _selectedLabourCardExpiry;
+  DateTime? _selectedVisaExpiry;
+  bool _isCompany = false;
   bool _isSaving = false;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _categoryController.dispose();
-    _notesController.dispose();
+    _employeeCompanyController.dispose();
+    _contactController.dispose();
     super.dispose();
   }
 
-  Future<void> _selectDate(BuildContext context) async {
+  Future<void> _selectLabourCardExpiry(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
+      initialDate: _selectedLabourCardExpiry ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(
+        const Duration(days: 365 * 5),
+      ), // Allow past dates
       lastDate: DateTime.now().add(const Duration(days: 365 * 10)), // 10 years
     );
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null) {
       setState(() {
-        _selectedDate = picked;
+        _selectedLabourCardExpiry = picked;
+      });
+    }
+  }
+
+  Future<void> _selectVisaExpiry(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedVisaExpiry ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(
+        const Duration(days: 365 * 5),
+      ), // Allow past dates
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)), // 10 years
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedVisaExpiry = picked;
       });
     }
   }
 
   Future<void> _saveItem() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    // No validation needed - all fields are optional
 
     if (!SheetsConfig.isConfigured) {
       if (mounted) {
@@ -89,17 +96,40 @@ class _AddItemScreenState extends State<AddItemScreen> {
         }
       }
 
-      // Create item model - normalize date to midnight (date-only) to avoid time component issues
-      final normalizedDate = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-      );
+      // Get next auto-increment number
+      final nextNumber = await sheetsService.getNextAutoIncrementNumber();
+
+      // Normalize dates to midnight (date-only) to avoid time component issues
+      // Only set labour card expiry for employees
+      DateTime? normalizedLabourCardExpiry;
+      if (!_isCompany && _selectedLabourCardExpiry != null) {
+        normalizedLabourCardExpiry = DateTime(
+          _selectedLabourCardExpiry!.year,
+          _selectedLabourCardExpiry!.month,
+          _selectedLabourCardExpiry!.day,
+        );
+      }
+
+      DateTime? normalizedVisaExpiry;
+      if (_selectedVisaExpiry != null) {
+        normalizedVisaExpiry = DateTime(
+          _selectedVisaExpiry!.year,
+          _selectedVisaExpiry!.month,
+          _selectedVisaExpiry!.day,
+        );
+      }
+
       final item = ItemModel(
-        name: _nameController.text.trim(),
-        expiryDate: normalizedDate,
-        category: _selectedCategory,
-        notes: _notesController.text.trim(),
+        no: nextNumber.toString(),
+        employeeCompany: _employeeCompanyController.text.trim().isEmpty
+            ? null
+            : _employeeCompanyController.text.trim(),
+        labourCardExpiry: normalizedLabourCardExpiry,
+        visaExpiry: normalizedVisaExpiry,
+        contact: _contactController.text.trim().isEmpty
+            ? null
+            : _contactController.text.trim(),
+        isCompany: _isCompany,
       );
 
       // Add item to Google Sheets
@@ -141,27 +171,71 @@ class _AddItemScreenState extends State<AddItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Name *',
-                hintText: 'Enter item name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.label),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a name';
-                }
-                return null;
+            CheckboxListTile(
+              title: const Text('Is Company'),
+              value: _isCompany,
+              onChanged: (bool? value) {
+                setState(() {
+                  _isCompany = value ?? false;
+                  // Clear labour card expiry when switching to company
+                  if (_isCompany) {
+                    _selectedLabourCardExpiry = null;
+                  }
+                });
               },
+              controlAffinity: ListTileControlAffinity.leading,
             ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _employeeCompanyController,
+              decoration: InputDecoration(
+                labelText: _isCompany ? 'Company' : 'Employee',
+                hintText: _isCompany
+                    ? 'Enter company name (optional)'
+                    : 'Enter employee name (optional)',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.person),
+              ),
+            ),
+            // Show labour card expiry only for employees
+            if (!_isCompany) ...[
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () => _selectLabourCardExpiry(context),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Labour card expiry',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _selectedLabourCardExpiry != null
+                            ? app_date_utils.DateUtils.formatDateDisplay(
+                                _selectedLabourCardExpiry!,
+                              )
+                            : 'Select date (optional)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: _selectedLabourCardExpiry != null
+                              ? null
+                              : Colors.grey,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             InkWell(
-              onTap: () => _selectDate(context),
+              onTap: () => _selectVisaExpiry(context),
               child: InputDecorator(
                 decoration: const InputDecoration(
-                  labelText: 'Expiry Date *',
+                  labelText: 'Visa expiry',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.calendar_today),
                 ),
@@ -169,8 +243,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      app_date_utils.DateUtils.formatDateDisplay(_selectedDate),
-                      style: const TextStyle(fontSize: 16),
+                      _selectedVisaExpiry != null
+                          ? app_date_utils.DateUtils.formatDateDisplay(
+                              _selectedVisaExpiry!,
+                            )
+                          : 'Select date (optional)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: _selectedVisaExpiry != null ? null : Colors.grey,
+                      ),
                     ),
                     const Icon(Icons.arrow_drop_down),
                   ],
@@ -178,37 +259,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: const InputDecoration(
-                labelText: 'Category *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.category),
-              ),
-              items: _categories.map((String category) {
-                return DropdownMenuItem<String>(
-                  value: category,
-                  child: Text(category),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    _selectedCategory = newValue;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
             TextFormField(
-              controller: _notesController,
+              controller: _contactController,
               decoration: const InputDecoration(
-                labelText: 'Notes',
-                hintText: 'Enter any additional notes (optional)',
+                labelText: 'Contact',
+                hintText: 'Enter contact information (optional)',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.note),
+                prefixIcon: Icon(Icons.contact_phone),
               ),
-              maxLines: 4,
+              maxLines: 2,
               textInputAction: TextInputAction.newline,
             ),
             const SizedBox(height: 24),

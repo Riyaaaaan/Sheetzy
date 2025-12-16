@@ -171,13 +171,15 @@ class GoogleSheetsService {
       for (int i = 1; i < rows.length; i++) {
         try {
           final row = rows[i];
-          // Ensure row has at least 4 columns, pad with empty strings if needed
-          while (row.length < 4) {
+          // Ensure row has at least 6 columns, pad with empty strings if needed
+          while (row.length < 6) {
             row.add('');
           }
           final item = ItemModel.fromSheetRow(row, i - 1);
-          if (item.name.isNotEmpty) {
-            // Only add items with a name
+          // Only add items that have at least one field filled (no or employeeCompany)
+          if ((item.no != null && item.no!.isNotEmpty) ||
+              (item.employeeCompany != null &&
+                  item.employeeCompany!.isNotEmpty)) {
             items.add(item);
           }
         } catch (e) {
@@ -193,6 +195,41 @@ class GoogleSheetsService {
     }
   }
 
+  // Get next auto-increment number based on highest existing number
+  Future<int> getNextAutoIncrementNumber() async {
+    if (!isInitialized || !SheetsConfig.isConfigured) {
+      throw Exception('Service not initialized or not configured');
+    }
+
+    try {
+      await _ensureSpreadsheetLoaded();
+
+      // Read all existing items
+      final items = await readItems();
+
+      if (items.isEmpty) {
+        return 1;
+      }
+
+      // Find the maximum numeric value in the "No" column
+      int maxNumber = 0;
+      for (final item in items) {
+        if (item.no != null && item.no!.isNotEmpty) {
+          final number = int.tryParse(item.no!);
+          if (number != null && number > maxNumber) {
+            maxNumber = number;
+          }
+        }
+      }
+
+      return maxNumber + 1;
+    } catch (e) {
+      print('Error getting next auto-increment number: $e');
+      // Return 1 as fallback if there's an error
+      return 1;
+    }
+  }
+
   // Add a new item to Google Sheets
   Future<bool> addItem(ItemModel item) async {
     if (!isInitialized || !SheetsConfig.isConfigured) {
@@ -202,8 +239,15 @@ class GoogleSheetsService {
     try {
       await _ensureSpreadsheetLoaded();
 
+      // Ensure item has a number (auto-increment if missing)
+      ItemModel itemToAdd = item;
+      if (item.no == null || item.no!.isEmpty) {
+        final nextNumber = await getNextAutoIncrementNumber();
+        itemToAdd = item.copyWith(no: nextNumber.toString());
+      }
+
       // Add row to worksheet using appendRow
-      await _worksheet!.values.appendRow(item.toSheetRow());
+      await _worksheet!.values.appendRow(itemToAdd.toSheetRow());
 
       return true;
     } catch (e) {

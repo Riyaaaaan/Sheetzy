@@ -87,30 +87,75 @@ class ExpiryCheckerService {
       int notificationsSent = 0;
       int itemsChecked = 0;
 
-      // Check each item for expiry
+      // Check each item for expiry (both labour card and visa)
       for (final item in items) {
-        // Check if item is expiring within 5 days
-        if (item.isExpiringWithinDays(daysBeforeExpiry)) {
+        final identifier = item.employeeCompany ?? item.no ?? 'Unknown';
+
+        // Check labour card expiry only for employees
+        if (item.isCompany != true &&
+            item.isExpiringWithinDays(daysBeforeExpiry)) {
           itemsChecked++;
           // Check if notification was already sent
-          final wasSent = await notificationService.wasNotificationSent(item);
+          final wasSent = await notificationService.wasNotificationSent(
+            item,
+            isVisa: false,
+          );
           if (!wasSent) {
             // Send notification via FCM if available, otherwise use local notifications
             if (useFCM) {
-              await fcmService.sendExpiryNotification(item);
-              print('[ExpiryChecker] FCM notification sent for: ${item.name}');
-            } else {
-              await notificationService.sendExpiryNotification(item);
+              await fcmService.sendExpiryNotification(item, isVisa: false);
               print(
-                '[ExpiryChecker] Local notification sent for: ${item.name}',
+                '[ExpiryChecker] FCM notification sent for: $identifier (Labour card)',
+              );
+            } else {
+              await notificationService.sendExpiryNotification(
+                item,
+                isVisa: false,
+              );
+              print(
+                '[ExpiryChecker] Local notification sent for: $identifier (Labour card)',
               );
             }
             // Mark as sent using notification service (shared state)
-            await notificationService.markNotificationSent(item);
+            await notificationService.markNotificationSent(item, isVisa: false);
             notificationsSent++;
           } else {
             print(
-              '[ExpiryChecker] Notification already sent for: ${item.name}',
+              '[ExpiryChecker] Notification already sent for: $identifier (Labour card)',
+            );
+          }
+        }
+
+        // Check visa expiry
+        if (item.isVisaExpiringWithinDays(daysBeforeExpiry)) {
+          itemsChecked++;
+          // Check if notification was already sent
+          final wasSent = await notificationService.wasNotificationSent(
+            item,
+            isVisa: true,
+          );
+          if (!wasSent) {
+            // Send notification via FCM if available, otherwise use local notifications
+            if (useFCM) {
+              await fcmService.sendExpiryNotification(item, isVisa: true);
+              print(
+                '[ExpiryChecker] FCM notification sent for: $identifier (Visa)',
+              );
+            } else {
+              await notificationService.sendExpiryNotification(
+                item,
+                isVisa: true,
+              );
+              print(
+                '[ExpiryChecker] Local notification sent for: $identifier (Visa)',
+              );
+            }
+            // Mark as sent using notification service (shared state)
+            await notificationService.markNotificationSent(item, isVisa: true);
+            notificationsSent++;
+          } else {
+            print(
+              '[ExpiryChecker] Notification already sent for: $identifier (Visa)',
             );
           }
         }

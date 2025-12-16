@@ -1,51 +1,98 @@
 import 'package:intl/intl.dart';
 
 class ItemModel {
-  final String name;
-  final DateTime expiryDate;
-  final String category;
-  final String notes;
+  final String? no;
+  final String? employeeCompany;
+  final DateTime? labourCardExpiry;
+  final DateTime? visaExpiry;
+  final String? contact;
+  final bool? isCompany;
   final int? rowIndex; // For updating existing rows in Google Sheets
 
   ItemModel({
-    required this.name,
-    required this.expiryDate,
-    required this.category,
-    required this.notes,
+    this.no,
+    this.employeeCompany,
+    this.labourCardExpiry,
+    this.visaExpiry,
+    this.contact,
+    this.isCompany,
     this.rowIndex,
   });
 
   // Convert from Google Sheets row data
   factory ItemModel.fromSheetRow(List<dynamic> row, int index) {
-    DateTime expiryDate;
-    if (row.length > 1 && row[1] != null) {
-      expiryDate = _parseDate(row[1]);
-    } else {
-      final now = DateTime.now();
-      expiryDate = DateTime(now.year, now.month, now.day);
+    DateTime? labourCardExpiry;
+    if (row.length > 2 &&
+        row[2] != null &&
+        row[2].toString().trim().isNotEmpty) {
+      labourCardExpiry = _parseDate(row[2]);
     }
+
+    DateTime? visaExpiry;
+    if (row.length > 3 &&
+        row[3] != null &&
+        row[3].toString().trim().isNotEmpty) {
+      visaExpiry = _parseDate(row[3]);
+    }
+
+    // Parse isCompany from column 5 (index 5)
+    // Accepts "Company" or "Employee" (case-insensitive)
+    // Also supports legacy "true"/"false" for backward compatibility
+    bool? isCompany;
+    if (row.length > 5 &&
+        row[5] != null &&
+        row[5].toString().trim().isNotEmpty) {
+      final typeValue = row[5].toString().trim().toLowerCase();
+      if (typeValue == 'company') {
+        isCompany = true;
+      } else if (typeValue == 'employee') {
+        isCompany = false;
+      } else {
+        // Backward compatibility: support "true"/"false" or "1"/"0"
+        isCompany = typeValue == 'true' || typeValue == '1';
+      }
+    }
+
     return ItemModel(
-      name: row.length > 0 ? (row[0]?.toString() ?? '') : '',
-      expiryDate: expiryDate,
-      category: row.length > 2 ? (row[2]?.toString() ?? '') : '',
-      notes: row.length > 3 ? (row[3]?.toString() ?? '') : '',
+      no: row.length > 0 && row[0] != null ? row[0].toString().trim() : null,
+      employeeCompany: row.length > 1 && row[1] != null
+          ? row[1].toString().trim()
+          : null,
+      labourCardExpiry: labourCardExpiry,
+      visaExpiry: visaExpiry,
+      contact: row.length > 4 && row[4] != null
+          ? row[4].toString().trim()
+          : null,
+      isCompany: isCompany,
       rowIndex: index + 2, // +2 because row 1 is header, and index is 0-based
     );
   }
 
   // Convert to Google Sheets row data
   List<String> toSheetRow() {
-    return [name, _formatDate(expiryDate), category, notes];
+    String typeValue = '';
+    if (isCompany == true) {
+      typeValue = 'Company';
+    } else if (isCompany == false) {
+      typeValue = 'Employee';
+    }
+    return [
+      no ?? '',
+      employeeCompany ?? '',
+      labourCardExpiry != null ? _formatDate(labourCardExpiry!) : '',
+      visaExpiry != null ? _formatDate(visaExpiry!) : '',
+      contact ?? '',
+      typeValue,
+    ];
   }
 
   // Parse date from various formats (handles Google Sheets date formats)
-  static DateTime _parseDate(dynamic dateValue) {
+  // Returns null if date cannot be parsed (instead of defaulting to current date)
+  static DateTime? _parseDate(dynamic dateValue) {
     try {
       // Handle null or empty values
       if (dateValue == null) {
-        print('[ItemModel] Date value is null, using current date');
-        final now = DateTime.now();
-        return DateTime(now.year, now.month, now.day);
+        return null;
       }
 
       // Handle numeric values (Google Sheets date serial numbers)
@@ -71,9 +118,7 @@ class ItemModel {
       final dateString = dateValue.toString().trim();
 
       if (dateString.isEmpty) {
-        print('[ItemModel] Date string is empty, using current date');
-        final now = DateTime.now();
-        return DateTime(now.year, now.month, now.day);
+        return null;
       }
 
       // Check if string is a numeric value (Google Sheets date serial number as string)
@@ -167,16 +212,14 @@ class ItemModel {
         print('[ItemModel] Failed to parse date: $dateString, error: $e');
       }
 
-      // If all parsing fails, return current date (normalized)
+      // If all parsing fails, return null
       print(
-        '[ItemModel] All date parsing attempts failed for: $dateString, using current date',
+        '[ItemModel] All date parsing attempts failed for: $dateString, returning null',
       );
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day);
+      return null;
     } catch (e) {
       print('[ItemModel] Error in _parseDate: $e');
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day);
+      return null;
     }
   }
 
@@ -187,46 +230,108 @@ class ItemModel {
     return normalizedDate.toIso8601String().split('T')[0]; // Returns YYYY-MM-DD
   }
 
-  // Check if item is expiring within specified days
+  // Check if labour card is expiring within specified days
   bool isExpiringWithinDays(int days) {
+    if (labourCardExpiry == null) return false;
     final now = DateTime.now();
     // Normalize both dates to midnight for accurate date-only comparison
     final today = DateTime(now.year, now.month, now.day);
-    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    final expiry = DateTime(
+      labourCardExpiry!.year,
+      labourCardExpiry!.month,
+      labourCardExpiry!.day,
+    );
     final difference = expiry.difference(today).inDays;
     return difference >= 0 && difference <= days;
   }
 
-  // Check if item has expired
-  bool get isExpired {
+  // Check if visa is expiring within specified days
+  bool isVisaExpiringWithinDays(int days) {
+    if (visaExpiry == null) return false;
     final now = DateTime.now();
     // Normalize both dates to midnight for accurate date-only comparison
     final today = DateTime(now.year, now.month, now.day);
-    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    final expiry = DateTime(
+      visaExpiry!.year,
+      visaExpiry!.month,
+      visaExpiry!.day,
+    );
+    final difference = expiry.difference(today).inDays;
+    return difference >= 0 && difference <= days;
+  }
+
+  // Check if labour card has expired
+  bool get isExpired {
+    if (labourCardExpiry == null) return false;
+    final now = DateTime.now();
+    // Normalize both dates to midnight for accurate date-only comparison
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(
+      labourCardExpiry!.year,
+      labourCardExpiry!.month,
+      labourCardExpiry!.day,
+    );
     return expiry.isBefore(today);
   }
 
-  // Get days until expiry
-  int get daysUntilExpiry {
+  // Check if visa has expired
+  bool get isVisaExpired {
+    if (visaExpiry == null) return false;
     final now = DateTime.now();
     // Normalize both dates to midnight for accurate date-only comparison
     final today = DateTime(now.year, now.month, now.day);
-    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    final expiry = DateTime(
+      visaExpiry!.year,
+      visaExpiry!.month,
+      visaExpiry!.day,
+    );
+    return expiry.isBefore(today);
+  }
+
+  // Get days until labour card expiry
+  int? get daysUntilExpiry {
+    if (labourCardExpiry == null) return null;
+    final now = DateTime.now();
+    // Normalize both dates to midnight for accurate date-only comparison
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(
+      labourCardExpiry!.year,
+      labourCardExpiry!.month,
+      labourCardExpiry!.day,
+    );
+    return expiry.difference(today).inDays;
+  }
+
+  // Get days until visa expiry
+  int? get visaDaysUntilExpiry {
+    if (visaExpiry == null) return null;
+    final now = DateTime.now();
+    // Normalize both dates to midnight for accurate date-only comparison
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(
+      visaExpiry!.year,
+      visaExpiry!.month,
+      visaExpiry!.day,
+    );
     return expiry.difference(today).inDays;
   }
 
   ItemModel copyWith({
-    String? name,
-    DateTime? expiryDate,
-    String? category,
-    String? notes,
+    String? no,
+    String? employeeCompany,
+    DateTime? labourCardExpiry,
+    DateTime? visaExpiry,
+    String? contact,
+    bool? isCompany,
     int? rowIndex,
   }) {
     return ItemModel(
-      name: name ?? this.name,
-      expiryDate: expiryDate ?? this.expiryDate,
-      category: category ?? this.category,
-      notes: notes ?? this.notes,
+      no: no ?? this.no,
+      employeeCompany: employeeCompany ?? this.employeeCompany,
+      labourCardExpiry: labourCardExpiry ?? this.labourCardExpiry,
+      visaExpiry: visaExpiry ?? this.visaExpiry,
+      contact: contact ?? this.contact,
+      isCompany: isCompany ?? this.isCompany,
       rowIndex: rowIndex ?? this.rowIndex,
     );
   }

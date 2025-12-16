@@ -42,8 +42,12 @@ class FCMService {
           await Firebase.initializeApp();
           print('[FCM] Firebase initialized successfully');
         } catch (e) {
-          print('[FCM] Failed to initialize Firebase (google-services.json may be missing): $e');
-          print('[FCM] Continuing without FCM - local notifications will be used');
+          print(
+            '[FCM] Failed to initialize Firebase (google-services.json may be missing): $e',
+          );
+          print(
+            '[FCM] Continuing without FCM - local notifications will be used',
+          );
           return false;
         }
       }
@@ -102,7 +106,9 @@ class FCMService {
 
   // Initialize local notifications for fallback
   Future<void> _initializeLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -134,7 +140,8 @@ class FCMService {
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(androidChannel);
   }
 
@@ -202,18 +209,29 @@ class FCMService {
 
   // Send notification for expiring item (using local notifications as FCM requires server)
   // In a production app, you would send FCM messages from your server
-  Future<void> sendExpiryNotification(ItemModel item) async {
+  Future<void> sendExpiryNotification(
+    ItemModel item, {
+    bool isVisa = false,
+  }) async {
     if (!_initialized) {
       print('[FCM] Service not initialized, cannot send notification');
       return;
     }
 
     try {
-      final daysUntilExpiry = item.daysUntilExpiry;
-      final title = 'Item Expiring Soon';
+      final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
+      final daysUntilExpiry = isVisa
+          ? item.visaDaysUntilExpiry
+          : item.daysUntilExpiry;
+
+      if (expiryDate == null || daysUntilExpiry == null) return;
+
+      final identifier = item.employeeCompany ?? item.no ?? 'Unknown';
+      final expiryType = isVisa ? 'Visa' : 'Labour card';
+      final title = '$expiryType Expiring Soon';
       final body = daysUntilExpiry == 0
-          ? '${item.name} expires today!'
-          : '${item.name} expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
+          ? '$identifier - $expiryType expires today!'
+          : '$identifier - $expiryType expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
 
       const androidDetails = AndroidNotificationDetails(
         'expiry_notifications',
@@ -240,8 +258,10 @@ class FCMService {
       );
 
       final notificationId =
-          (item.name.hashCode ^ item.expiryDate.millisecondsSinceEpoch) &
-              0x7FFFFFFF;
+          (identifier.hashCode ^
+              expiryDate.millisecondsSinceEpoch ^
+              (isVisa ? 1 : 0)) &
+          0x7FFFFFFF;
 
       await _localNotifications.show(
         notificationId,
@@ -249,12 +269,13 @@ class FCMService {
         body,
         details,
         payload: json.encode({
-          'name': item.name,
-          'expiryDate': item.expiryDate.toIso8601String(),
+          'identifier': identifier,
+          'expiryDate': expiryDate.toIso8601String(),
+          'isVisa': isVisa,
         }),
       );
 
-      print('[FCM] Local notification sent for: ${item.name}');
+      print('[FCM] Local notification sent for: $identifier ($expiryType)');
     } catch (e) {
       print('[FCM] Error sending notification: $e');
     }
@@ -270,8 +291,8 @@ class FCMService {
         provisional: false,
       );
 
-      final granted = settings.authorizationStatus ==
-              AuthorizationStatus.authorized ||
+      final granted =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
 
       print('[FCM] Permission request result: $granted');
@@ -302,4 +323,3 @@ class FCMService {
     }
   }
 }
-

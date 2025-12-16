@@ -152,40 +152,65 @@ class NotificationService {
     }
   }
 
-  // Check if notification was already sent for an item
-  Future<bool> wasNotificationSent(ItemModel item) async {
+  // Check if notification was already sent for an item (labour card)
+  Future<bool> wasNotificationSent(
+    ItemModel item, {
+    bool isVisa = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    final identifier = item.no ?? item.employeeCompany ?? 'unknown';
+    final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
+    if (expiryDate == null) return false;
     final key =
-        'notification_sent_${item.name}_${item.expiryDate.millisecondsSinceEpoch}';
+        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}';
     return prefs.getBool(key) ?? false;
   }
 
   // Mark notification as sent for an item
-  Future<void> markNotificationSent(ItemModel item) async {
+  Future<void> markNotificationSent(
+    ItemModel item, {
+    bool isVisa = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    final identifier = item.no ?? item.employeeCompany ?? 'unknown';
+    final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
+    if (expiryDate == null) return;
     final key =
-        'notification_sent_${item.name}_${item.expiryDate.millisecondsSinceEpoch}';
+        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}';
     await prefs.setBool(key, true);
   }
 
-  // Send notification for expiring item
-  Future<void> sendExpiryNotification(ItemModel item) async {
+  // Send notification for expiring item (labour card or visa)
+  Future<void> sendExpiryNotification(
+    ItemModel item, {
+    bool isVisa = false,
+  }) async {
     // Check if notification was already sent
-    if (await wasNotificationSent(item)) {
+    if (await wasNotificationSent(item, isVisa: isVisa)) {
       return;
     }
 
+    final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
+    final daysUntilExpiry = isVisa
+        ? item.visaDaysUntilExpiry
+        : item.daysUntilExpiry;
+    final isExpired = isVisa ? item.isVisaExpired : item.isExpired;
+
     // Don't send notifications for expired items (only for items 5 or fewer days until expiry)
-    if (item.isExpired || item.daysUntilExpiry < 0) {
+    if (expiryDate == null ||
+        isExpired ||
+        daysUntilExpiry == null ||
+        daysUntilExpiry < 0) {
       return;
     }
 
     try {
-      final daysUntilExpiry = item.daysUntilExpiry;
-      final title = 'Item Expiring Soon';
+      final identifier = item.employeeCompany ?? item.no ?? 'Unknown';
+      final expiryType = isVisa ? 'Visa' : 'Labour card';
+      final title = '$expiryType Expiring Soon';
       final body = daysUntilExpiry == 0
-          ? '${item.name} expires today!'
-          : '${item.name} expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
+          ? '$identifier - $expiryType expires today!'
+          : '$identifier - $expiryType expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
 
       const androidDetails = AndroidNotificationDetails(
         'expiry_notifications',
@@ -212,10 +237,12 @@ class NotificationService {
         iOS: iosDetails,
       );
 
-      // Use a unique ID based on item name and expiry date
+      // Use a unique ID based on identifier and expiry date
       // XOR and mask to ensure 32-bit integer range (0 to 2^31 - 1)
       final notificationId =
-          (item.name.hashCode ^ item.expiryDate.millisecondsSinceEpoch) &
+          (identifier.hashCode ^
+              expiryDate.millisecondsSinceEpoch ^
+              (isVisa ? 1 : 0)) &
           0x7FFFFFFF;
 
       await _notifications.show(
@@ -224,15 +251,16 @@ class NotificationService {
         body,
         details,
         payload: json.encode({
-          'name': item.name,
-          'expiryDate': item.expiryDate.toIso8601String(),
+          'identifier': identifier,
+          'expiryDate': expiryDate.toIso8601String(),
+          'isVisa': isVisa,
         }),
       );
 
       // Mark notification as sent
-      await markNotificationSent(item);
+      await markNotificationSent(item, isVisa: isVisa);
       print(
-        '[NotificationService] Notification sent successfully for: ${item.name}',
+        '[NotificationService] Notification sent successfully for: $identifier ($expiryType)',
       );
     } catch (e, stackTrace) {
       print('[NotificationService] Error sending notification: $e');
@@ -243,18 +271,27 @@ class NotificationService {
   // Schedule notification for a specific date/time
   Future<void> scheduleExpiryNotification(
     ItemModel item,
-    DateTime scheduledDate,
-  ) async {
-    if (await wasNotificationSent(item)) {
+    DateTime scheduledDate, {
+    bool isVisa = false,
+  }) async {
+    if (await wasNotificationSent(item, isVisa: isVisa)) {
       return;
     }
 
     try {
-      final daysUntilExpiry = item.daysUntilExpiry;
-      final title = 'Item Expiring Soon';
+      final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
+      final daysUntilExpiry = isVisa
+          ? item.visaDaysUntilExpiry
+          : item.daysUntilExpiry;
+
+      if (expiryDate == null || daysUntilExpiry == null) return;
+
+      final identifier = item.employeeCompany ?? item.no ?? 'Unknown';
+      final expiryType = isVisa ? 'Visa' : 'Labour card';
+      final title = '$expiryType Expiring Soon';
       final body = daysUntilExpiry == 0
-          ? '${item.name} expires today!'
-          : '${item.name} expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
+          ? '$identifier - $expiryType expires today!'
+          : '$identifier - $expiryType expires in $daysUntilExpiry day${daysUntilExpiry == 1 ? '' : 's'}';
 
       const androidDetails = AndroidNotificationDetails(
         'expiry_notifications',
@@ -281,10 +318,12 @@ class NotificationService {
         iOS: iosDetails,
       );
 
-      // Use a unique ID based on item name and expiry date
+      // Use a unique ID based on identifier and expiry date
       // XOR and mask to ensure 32-bit integer range (0 to 2^31 - 1)
       final notificationId =
-          (item.name.hashCode ^ item.expiryDate.millisecondsSinceEpoch) &
+          (identifier.hashCode ^
+              expiryDate.millisecondsSinceEpoch ^
+              (isVisa ? 1 : 0)) &
           0x7FFFFFFF;
 
       // Note: flutter_local_notifications doesn't support exact scheduling
@@ -296,12 +335,13 @@ class NotificationService {
         body,
         details,
         payload: json.encode({
-          'name': item.name,
-          'expiryDate': item.expiryDate.toIso8601String(),
+          'identifier': identifier,
+          'expiryDate': expiryDate.toIso8601String(),
+          'isVisa': isVisa,
         }),
       );
 
-      await markNotificationSent(item);
+      await markNotificationSent(item, isVisa: isVisa);
     } catch (e) {
       print('Error scheduling notification: $e');
     }
