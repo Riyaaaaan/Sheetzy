@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/sheets_config.dart';
 import '../services/google_sheets_service.dart';
 import 'dart:convert';
+import 'import_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -44,14 +45,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       // Load from secure storage
       final spreadsheetId = await _storage.read(key: 'spreadsheet_id');
-      final serviceAccountEmail = await _storage.read(key: 'service_account_email');
-      final credentials = await _storage.read(key: 'service_account_credentials');
+      final serviceAccountEmail = await _storage.read(
+        key: 'service_account_email',
+      );
+      final credentials = await _storage.read(
+        key: 'service_account_credentials',
+      );
 
       setState(() {
         _spreadsheetIdController.text = spreadsheetId ?? '';
         _serviceAccountEmailController.text = serviceAccountEmail ?? '';
         _credentialsController.text = credentials ?? '';
-        
+
         // Update config
         SheetsConfig.spreadsheetId = spreadsheetId;
         SheetsConfig.serviceAccountEmail = serviceAccountEmail;
@@ -105,7 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         key: 'service_account_email',
         value: _serviceAccountEmailController.text.trim(),
       );
-      
+
       if (_credentialsController.text.trim().isNotEmpty) {
         await _storage.write(
           key: 'service_account_credentials',
@@ -115,7 +120,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Update config
       SheetsConfig.spreadsheetId = _spreadsheetIdController.text.trim();
-      SheetsConfig.serviceAccountEmail = _serviceAccountEmailController.text.trim();
+      SheetsConfig.serviceAccountEmail = _serviceAccountEmailController.text
+          .trim();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -184,42 +190,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       print('[SettingsScreen] Starting connection test...');
-      
+
       // Save settings first
       await _saveSettings();
       print('[SettingsScreen] Settings saved');
 
       // Initialize Google Sheets service
       final sheetsService = GoogleSheetsService();
-      
+
       // Dispose any existing instance
       sheetsService.dispose();
       print('[SettingsScreen] Service disposed');
-      
+
       // Try to initialize with credentials from storage if available
-      final credentials = await _storage.read(key: 'service_account_credentials');
+      final credentials = await _storage.read(
+        key: 'service_account_credentials',
+      );
       bool initialized = false;
       String? initError;
-      
+
       if (credentials != null && credentials.isNotEmpty) {
         print('[SettingsScreen] Found credentials in storage, initializing...');
         try {
-          initialized = await sheetsService.initializeWithCredentials(credentials);
+          initialized = await sheetsService.initializeWithCredentials(
+            credentials,
+          );
           if (initialized) {
-            print('[SettingsScreen] Initialized successfully with stored credentials');
+            print(
+              '[SettingsScreen] Initialized successfully with stored credentials',
+            );
           } else {
             print('[SettingsScreen] Initialization returned false');
             initError = 'Failed to initialize with provided credentials';
           }
         } catch (e, stackTrace) {
-          print('[SettingsScreen] Error initializing with stored credentials: $e');
+          print(
+            '[SettingsScreen] Error initializing with stored credentials: $e',
+          );
           print('[SettingsScreen] Stack trace: $stackTrace');
           initError = e.toString();
         }
       } else {
         print('[SettingsScreen] No credentials in storage');
       }
-      
+
       if (!initialized) {
         // Fallback to asset file
         print('[SettingsScreen] Trying to initialize from asset file...');
@@ -228,7 +242,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (initialized) {
             print('[SettingsScreen] Initialized successfully from asset file');
           } else {
-            print('[SettingsScreen] Initialization from asset file returned false');
+            print(
+              '[SettingsScreen] Initialization from asset file returned false',
+            );
             initError = initError ?? 'Failed to initialize from asset file';
           }
         } catch (e, stackTrace) {
@@ -239,7 +255,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       if (!initialized) {
-        final errorMsg = initError ?? 'Failed to initialize Google Sheets service. Please check your credentials.';
+        final errorMsg =
+            initError ??
+            'Failed to initialize Google Sheets service. Please check your credentials.';
         print('[SettingsScreen] Initialization failed: $errorMsg');
         setState(() {
           _testResult = errorMsg;
@@ -263,7 +281,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       print('[SettingsScreen] Testing connection...');
       try {
         final connected = await sheetsService.testConnection();
-        
+
         if (connected) {
           print('[SettingsScreen] Connection test successful!');
           setState(() {
@@ -273,7 +291,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Connection successful! Spreadsheet is accessible.'),
+                content: Text(
+                  'Connection successful! Spreadsheet is accessible.',
+                ),
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 4),
               ),
@@ -348,9 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: _isLoading && _spreadsheetIdController.text.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : Form(
@@ -360,10 +378,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const Text(
                     'Google Sheets Configuration',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -378,7 +393,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       hintText: 'Enter your Google Sheets spreadsheet ID',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.table_chart),
-                      helperText: 'Found in the URL: /spreadsheets/d/SPREADSHEET_ID/edit',
+                      helperText:
+                          'Found in the URL: /spreadsheets/d/SPREADSHEET_ID/edit',
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -395,7 +411,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       hintText: 'Enter service account email (optional)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.email),
-                      helperText: 'Optional: Service account email for reference',
+                      helperText:
+                          'Optional: Service account email for reference',
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -406,7 +423,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       hintText: 'Paste service account JSON credentials',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.key),
-                      helperText: 'Optional: Paste JSON credentials if not using asset file',
+                      helperText:
+                          'Optional: Paste JSON credentials if not using asset file',
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.paste),
                         onPressed: _pasteFromClipboard,
@@ -475,10 +493,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Data Management',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Import data from Excel files to your Google Sheets.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ImportScreen(),
+                        ),
+                      );
+                      if (result == true && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Import completed! Return to home to see updated items.',
+                            ),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.upload_file_outlined),
+                    label: const Text('Import Excel File'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF3B82F6),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
     );
   }
 }
-

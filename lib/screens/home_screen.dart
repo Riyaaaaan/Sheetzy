@@ -9,7 +9,6 @@ import '../config/sheets_config.dart';
 import '../utils/date_utils.dart' as app_date_utils;
 import 'add_item_screen.dart';
 import 'settings_screen.dart';
-import 'import_screen.dart';
 
 enum SortMode { none, visaExpiry, labourCardExpiry }
 
@@ -389,21 +388,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file_outlined),
-            color: const Color(0xFF64748B),
-            tooltip: 'Import Excel',
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ImportScreen()),
-              );
-              // Reload items after importing
-              if (result == true) {
-                _loadItems();
-              }
-            },
           ),
           IconButton(
             icon: const Icon(Icons.notifications_active_outlined),
