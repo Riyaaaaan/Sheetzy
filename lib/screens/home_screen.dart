@@ -9,6 +9,7 @@ import '../config/sheets_config.dart';
 import '../utils/date_utils.dart' as app_date_utils;
 import 'add_item_screen.dart';
 import 'settings_screen.dart';
+import 'import_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -219,12 +220,28 @@ class _HomeScreenState extends State<HomeScreen> {
         if (_sheetsService.isInitialized) {
           final items = await _sheetsService.readItems();
           for (final item in items) {
-            final hasLabourCardExpiring =
-                item.isCompany != true &&
-                item.isExpiringWithinDays(5) &&
-                !item.isExpired;
-            final hasVisaExpiring =
-                item.isVisaExpiringWithinDays(5) && !item.isVisaExpired;
+            // Check all notification intervals (10, 5, 3, 1 days)
+            bool hasLabourCardExpiring = false;
+            bool hasVisaExpiring = false;
+
+            if (item.isCompany != true && !item.isExpired) {
+              for (final interval in [10, 5, 3, 1]) {
+                if (item.isExpiringWithinDays(interval)) {
+                  hasLabourCardExpiring = true;
+                  break;
+                }
+              }
+            }
+
+            if (!item.isVisaExpired) {
+              for (final interval in [10, 5, 3, 1]) {
+                if (item.isVisaExpiringWithinDays(interval)) {
+                  hasVisaExpiring = true;
+                  break;
+                }
+              }
+            }
+
             if (hasLabourCardExpiring || hasVisaExpiring) {
               eligibleItems++;
             }
@@ -240,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
             content: Text(
               eligibleItems > 0
                   ? 'Notification check completed. $eligibleItems item(s) should have received system notifications. Check your notification tray!'
-                  : 'Notification check completed. No items expiring within 5 days found.',
+                  : 'Notification check completed. No items expiring within 10, 5, 3, or 1 days found.',
             ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
@@ -276,6 +293,21 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.upload_file_outlined),
+            color: const Color(0xFF64748B),
+            tooltip: 'Import Excel',
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ImportScreen()),
+              );
+              // Reload items after importing
+              if (result == true) {
+                _loadItems();
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.notifications_active_outlined),
             color: const Color(0xFF64748B),
@@ -474,13 +506,25 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Color(0xFF1E293B),
                             ),
                           ),
+                          if (item.companyName != null &&
+                              item.companyName!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              item.companyName!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
                           if (item.no != null) ...[
                             const SizedBox(height: 2),
                             Text(
                               item.no!,
                               style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF64748B),
+                                fontSize: 12,
+                                color: Color(0xFF94A3B8),
                               ),
                             ),
                           ],

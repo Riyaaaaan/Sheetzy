@@ -14,15 +14,16 @@ class AddItemScreen extends StatefulWidget {
 class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _employeeCompanyController = TextEditingController();
+  final _companyNameController = TextEditingController();
   final _contactController = TextEditingController();
   DateTime? _selectedLabourCardExpiry;
   DateTime? _selectedVisaExpiry;
-  bool _isCompany = false;
   bool _isSaving = false;
 
   @override
   void dispose() {
     _employeeCompanyController.dispose();
+    _companyNameController.dispose();
     _contactController.dispose();
     super.dispose();
   }
@@ -100,9 +101,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
       final nextNumber = await sheetsService.getNextAutoIncrementNumber();
 
       // Normalize dates to midnight (date-only) to avoid time component issues
-      // Only set labour card expiry for employees
       DateTime? normalizedLabourCardExpiry;
-      if (!_isCompany && _selectedLabourCardExpiry != null) {
+      if (_selectedLabourCardExpiry != null) {
         normalizedLabourCardExpiry = DateTime(
           _selectedLabourCardExpiry!.year,
           _selectedLabourCardExpiry!.month,
@@ -124,12 +124,14 @@ class _AddItemScreenState extends State<AddItemScreen> {
         employeeCompany: _employeeCompanyController.text.trim().isEmpty
             ? null
             : _employeeCompanyController.text.trim(),
+        companyName: _companyNameController.text.trim().isEmpty
+            ? null
+            : _companyNameController.text.trim(),
         labourCardExpiry: normalizedLabourCardExpiry,
         visaExpiry: normalizedVisaExpiry,
         contact: _contactController.text.trim().isEmpty
             ? null
             : _contactController.text.trim(),
-        isCompany: _isCompany,
       );
 
       // Add item to Google Sheets
@@ -171,65 +173,55 @@ class _AddItemScreenState extends State<AddItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            CheckboxListTile(
-              title: const Text('Is Company'),
-              value: _isCompany,
-              onChanged: (bool? value) {
-                setState(() {
-                  _isCompany = value ?? false;
-                  // Clear labour card expiry when switching to company
-                  if (_isCompany) {
-                    _selectedLabourCardExpiry = null;
-                  }
-                });
-              },
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-            const SizedBox(height: 8),
             TextFormField(
               controller: _employeeCompanyController,
-              decoration: InputDecoration(
-                labelText: _isCompany ? 'Company' : 'Employee',
-                hintText: _isCompany
-                    ? 'Enter company name (optional)'
-                    : 'Enter employee name (optional)',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.person),
+              decoration: const InputDecoration(
+                labelText: 'Employee',
+                hintText: 'Enter employee name (optional)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
               ),
             ),
-            // Show labour card expiry only for employees
-            if (!_isCompany) ...[
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => _selectLabourCardExpiry(context),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Labour card expiry',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _selectedLabourCardExpiry != null
-                            ? app_date_utils.DateUtils.formatDateDisplay(
-                                _selectedLabourCardExpiry!,
-                              )
-                            : 'Select date (optional)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _selectedLabourCardExpiry != null
-                              ? null
-                              : Colors.grey,
-                        ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _companyNameController,
+              decoration: const InputDecoration(
+                labelText: 'Company Name',
+                hintText: 'Enter company name (optional)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.business),
+              ),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: () => _selectLabourCardExpiry(context),
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Labour card expiry',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.calendar_today),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedLabourCardExpiry != null
+                          ? app_date_utils.DateUtils.formatDateDisplay(
+                              _selectedLabourCardExpiry!,
+                            )
+                          : 'Select date (optional)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: _selectedLabourCardExpiry != null
+                            ? null
+                            : Colors.grey,
                       ),
-                      const Icon(Icons.arrow_drop_down),
-                    ],
-                  ),
+                    ),
+                    const Icon(Icons.arrow_drop_down),
+                  ],
                 ),
               ),
-            ],
+            ),
             const SizedBox(height: 16),
             InkWell(
               onTap: () => _selectVisaExpiry(context),

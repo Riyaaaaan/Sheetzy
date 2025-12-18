@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 class ItemModel {
   final String? no;
   final String? employeeCompany;
+  final String? companyName;
   final DateTime? labourCardExpiry;
   final DateTime? visaExpiry;
   final String? contact;
@@ -12,6 +13,7 @@ class ItemModel {
   ItemModel({
     this.no,
     this.employeeCompany,
+    this.companyName,
     this.labourCardExpiry,
     this.visaExpiry,
     this.contact,
@@ -35,54 +37,30 @@ class ItemModel {
       visaExpiry = _parseDate(row[3]);
     }
 
-    // Parse isCompany from column 5 (index 5)
-    // Accepts "Company" or "Employee" (case-insensitive)
-    // Also supports legacy "true"/"false" for backward compatibility
-    bool? isCompany;
-    if (row.length > 5 &&
-        row[5] != null &&
-        row[5].toString().trim().isNotEmpty) {
-      final typeValue = row[5].toString().trim().toLowerCase();
-      if (typeValue == 'company') {
-        isCompany = true;
-      } else if (typeValue == 'employee') {
-        isCompany = false;
-      } else {
-        // Backward compatibility: support "true"/"false" or "1"/"0"
-        isCompany = typeValue == 'true' || typeValue == '1';
-      }
-    }
-
     return ItemModel(
       no: row.length > 0 && row[0] != null ? row[0].toString().trim() : null,
       employeeCompany: row.length > 1 && row[1] != null
           ? row[1].toString().trim()
           : null,
-      labourCardExpiry: labourCardExpiry,
-      visaExpiry: visaExpiry,
-      contact: row.length > 4 && row[4] != null
+      companyName: row.length > 4 && row[4] != null
           ? row[4].toString().trim()
           : null,
-      isCompany: isCompany,
+      labourCardExpiry: labourCardExpiry,
+      visaExpiry: visaExpiry,
+      contact: null, // Contact no longer stored in sheet
+      isCompany: null, // isCompany no longer stored in sheet
       rowIndex: index + 2, // +2 because row 1 is header, and index is 0-based
     );
   }
 
   // Convert to Google Sheets row data
   List<String> toSheetRow() {
-    String typeValue = '';
-    if (isCompany == true) {
-      typeValue = 'Company';
-    } else if (isCompany == false) {
-      typeValue = 'Employee';
-    }
     return [
       no ?? '',
       employeeCompany ?? '',
       labourCardExpiry != null ? _formatDate(labourCardExpiry!) : '',
       visaExpiry != null ? _formatDate(visaExpiry!) : '',
-      contact ?? '',
-      typeValue,
+      companyName ?? '',
     ];
   }
 
@@ -319,6 +297,7 @@ class ItemModel {
   ItemModel copyWith({
     String? no,
     String? employeeCompany,
+    String? companyName,
     DateTime? labourCardExpiry,
     DateTime? visaExpiry,
     String? contact,
@@ -328,6 +307,7 @@ class ItemModel {
     return ItemModel(
       no: no ?? this.no,
       employeeCompany: employeeCompany ?? this.employeeCompany,
+      companyName: companyName ?? this.companyName,
       labourCardExpiry: labourCardExpiry ?? this.labourCardExpiry,
       visaExpiry: visaExpiry ?? this.visaExpiry,
       contact: contact ?? this.contact,

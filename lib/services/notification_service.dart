@@ -156,13 +156,15 @@ class NotificationService {
   Future<bool> wasNotificationSent(
     ItemModel item, {
     bool isVisa = false,
+    int? daysInterval,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final identifier = item.no ?? item.employeeCompany ?? 'unknown';
     final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
     if (expiryDate == null) return false;
+    final intervalSuffix = daysInterval != null ? '_$daysInterval' : '';
     final key =
-        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}';
+        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}$intervalSuffix';
     return prefs.getBool(key) ?? false;
   }
 
@@ -170,13 +172,15 @@ class NotificationService {
   Future<void> markNotificationSent(
     ItemModel item, {
     bool isVisa = false,
+    int? daysInterval,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final identifier = item.no ?? item.employeeCompany ?? 'unknown';
     final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
     if (expiryDate == null) return;
+    final intervalSuffix = daysInterval != null ? '_$daysInterval' : '';
     final key =
-        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}';
+        'notification_sent_${identifier}_${isVisa ? 'visa' : 'labour'}_${expiryDate.millisecondsSinceEpoch}$intervalSuffix';
     await prefs.setBool(key, true);
   }
 
@@ -184,23 +188,28 @@ class NotificationService {
   Future<void> sendExpiryNotification(
     ItemModel item, {
     bool isVisa = false,
+    int? daysInterval,
   }) async {
-    // Check if notification was already sent
-    if (await wasNotificationSent(item, isVisa: isVisa)) {
-      return;
-    }
-
     final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
     final daysUntilExpiry = isVisa
         ? item.visaDaysUntilExpiry
         : item.daysUntilExpiry;
     final isExpired = isVisa ? item.isVisaExpired : item.isExpired;
 
-    // Don't send notifications for expired items (only for items 5 or fewer days until expiry)
+    // Don't send notifications for expired items
     if (expiryDate == null ||
         isExpired ||
         daysUntilExpiry == null ||
         daysUntilExpiry < 0) {
+      return;
+    }
+
+    // Check if notification was already sent for this specific interval
+    if (await wasNotificationSent(
+      item,
+      isVisa: isVisa,
+      daysInterval: daysInterval,
+    )) {
       return;
     }
 
@@ -257,10 +266,14 @@ class NotificationService {
         }),
       );
 
-      // Mark notification as sent
-      await markNotificationSent(item, isVisa: isVisa);
+      // Mark notification as sent for this interval
+      await markNotificationSent(
+        item,
+        isVisa: isVisa,
+        daysInterval: daysInterval,
+      );
       print(
-        '[NotificationService] Notification sent successfully for: $identifier ($expiryType)',
+        '[NotificationService] Notification sent successfully for: $identifier ($expiryType)${daysInterval != null ? ' - $daysInterval days' : ''}',
       );
     } catch (e, stackTrace) {
       print('[NotificationService] Error sending notification: $e');
@@ -273,8 +286,13 @@ class NotificationService {
     ItemModel item,
     DateTime scheduledDate, {
     bool isVisa = false,
+    int? daysInterval,
   }) async {
-    if (await wasNotificationSent(item, isVisa: isVisa)) {
+    if (await wasNotificationSent(
+      item,
+      isVisa: isVisa,
+      daysInterval: daysInterval,
+    )) {
       return;
     }
 
@@ -341,7 +359,11 @@ class NotificationService {
         }),
       );
 
-      await markNotificationSent(item, isVisa: isVisa);
+      await markNotificationSent(
+        item,
+        isVisa: isVisa,
+        daysInterval: daysInterval,
+      );
     } catch (e) {
       print('Error scheduling notification: $e');
     }

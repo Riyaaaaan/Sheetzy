@@ -212,6 +212,7 @@ class FCMService {
   Future<void> sendExpiryNotification(
     ItemModel item, {
     bool isVisa = false,
+    int? daysInterval,
   }) async {
     if (!_initialized) {
       print('[FCM] Service not initialized, cannot send notification');
