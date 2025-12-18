@@ -11,6 +11,8 @@ import 'add_item_screen.dart';
 import 'settings_screen.dart';
 import 'import_screen.dart';
 
+enum SortMode { none, visaExpiry, labourCardExpiry }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -24,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ItemModel> _items = [];
   bool _isLoading = false;
   String? _errorMessage;
+  SortMode _sortMode = SortMode.none;
 
   @override
   void initState() {
@@ -194,6 +197,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return Icons.check_circle_outline_rounded;
   }
 
+  List<ItemModel> _sortItems(List<ItemModel> items, SortMode mode) {
+    if (mode == SortMode.none) {
+      return items;
+    }
+
+    final sorted = List<ItemModel>.from(items);
+    sorted.sort((a, b) {
+      DateTime? dateA, dateB;
+      if (mode == SortMode.visaExpiry) {
+        dateA = a.visaExpiry;
+        dateB = b.visaExpiry;
+      } else if (mode == SortMode.labourCardExpiry) {
+        dateA = a.labourCardExpiry;
+        dateB = b.labourCardExpiry;
+      }
+
+      // Handle nulls - put them at the end
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+
+      // Ascending order (earliest dates first - items expiring soonest appear first)
+      return dateA.compareTo(dateB);
+    });
+    return sorted;
+  }
+
   // Trigger debug notifications manually
   Future<void> _triggerDebugNotifications() async {
     try {
@@ -293,6 +323,73 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          PopupMenuButton<SortMode>(
+            icon: const Icon(Icons.sort_outlined),
+            color: const Color(0xFF64748B),
+            tooltip: 'Sort items',
+            onSelected: (SortMode mode) {
+              setState(() {
+                _sortMode = mode;
+              });
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<SortMode>>[
+              PopupMenuItem<SortMode>(
+                value: SortMode.none,
+                child: Row(
+                  children: [
+                    Icon(
+                      _sortMode == SortMode.none
+                          ? Icons.check
+                          : Icons.radio_button_unchecked,
+                      size: 20,
+                      color: _sortMode == SortMode.none
+                          ? const Color(0xFF3B82F6)
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('No Sort'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<SortMode>(
+                value: SortMode.visaExpiry,
+                child: Row(
+                  children: [
+                    Icon(
+                      _sortMode == SortMode.visaExpiry
+                          ? Icons.check
+                          : Icons.radio_button_unchecked,
+                      size: 20,
+                      color: _sortMode == SortMode.visaExpiry
+                          ? const Color(0xFF3B82F6)
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Sort by Visa Expiry'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<SortMode>(
+                value: SortMode.labourCardExpiry,
+                child: Row(
+                  children: [
+                    Icon(
+                      _sortMode == SortMode.labourCardExpiry
+                          ? Icons.check
+                          : Icons.radio_button_unchecked,
+                      size: 20,
+                      color: _sortMode == SortMode.labourCardExpiry
+                          ? const Color(0xFF3B82F6)
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Sort by Labour Card Expiry'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.upload_file_outlined),
             color: const Color(0xFF64748B),
@@ -438,13 +535,15 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final sortedItems = _sortItems(_items, _sortMode);
+
     return RefreshIndicator(
       onRefresh: _loadItems,
       child: ListView.builder(
-        itemCount: _items.length,
+        itemCount: sortedItems.length,
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
-          final item = _items[index];
+          final item = sortedItems[index];
           return _buildModernCard(item);
         },
       ),

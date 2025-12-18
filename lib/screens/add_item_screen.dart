@@ -15,7 +15,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _employeeCompanyController = TextEditingController();
   final _companyNameController = TextEditingController();
-  final _contactController = TextEditingController();
   DateTime? _selectedLabourCardExpiry;
   DateTime? _selectedVisaExpiry;
   bool _isSaving = false;
@@ -24,7 +23,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
   void dispose() {
     _employeeCompanyController.dispose();
     _companyNameController.dispose();
-    _contactController.dispose();
     super.dispose();
   }
 
@@ -129,9 +127,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
             : _companyNameController.text.trim(),
         labourCardExpiry: normalizedLabourCardExpiry,
         visaExpiry: normalizedVisaExpiry,
-        contact: _contactController.text.trim().isEmpty
-            ? null
-            : _contactController.text.trim(),
       );
 
       // Add item to Google Sheets
@@ -249,18 +244,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _contactController,
-              decoration: const InputDecoration(
-                labelText: 'Contact',
-                hintText: 'Enter contact information (optional)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.contact_phone),
-              ),
-              maxLines: 2,
-              textInputAction: TextInputAction.newline,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
