@@ -11,6 +11,83 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('[FCM] Background message received: ${message.messageId}');
   print('[FCM] Notification title: ${message.notification?.title}');
   print('[FCM] Notification body: ${message.notification?.body}');
+
+  // Initialize local notifications in background context
+  final FlutterLocalNotificationsPlugin localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosSettings = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+  const initSettings = InitializationSettings(
+    android: androidSettings,
+    iOS: iosSettings,
+  );
+
+  await localNotifications.initialize(
+    initSettings,
+    onDidReceiveNotificationResponse: (response) {
+      print('[FCM] Background notification tapped: ${response.payload}');
+    },
+  );
+
+  // Create notification channel for Android
+  const androidChannel = AndroidNotificationChannel(
+    'expiry_notifications',
+    'Expiry Notifications',
+    description: 'Notifications for items expiring soon',
+    importance: Importance.high,
+    playSound: true,
+    enableVibration: true,
+    showBadge: true,
+  );
+
+  await localNotifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(androidChannel);
+
+  // Show notification if notification data is present
+  if (message.notification != null) {
+    const androidDetails = AndroidNotificationDetails(
+      'expiry_notifications',
+      'Expiry Notifications',
+      channelDescription: 'Notifications for items expiring soon',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+      ongoing: false,
+      autoCancel: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await localNotifications.show(
+      message.hashCode % 2147483647,
+      message.notification!.title ?? 'Notification',
+      message.notification!.body ?? '',
+      details,
+      payload: json.encode(message.data),
+    );
+
+    print('[FCM] Background notification displayed');
+  }
 }
 
 class FCMService {

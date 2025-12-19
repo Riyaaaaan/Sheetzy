@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:workmanager/workmanager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../services/google_sheets_service.dart';
 import '../services/notification_service.dart';
 import '../services/fcm_service.dart';
@@ -28,10 +31,55 @@ class ExpiryCheckerService {
     await Workmanager().cancelByUniqueName(taskName);
   }
 
+  // Load configuration from secure storage (for background context)
+  static Future<void> _loadConfigFromStorage() async {
+    try {
+      const storage = FlutterSecureStorage();
+      final spreadsheetId = await storage.read(key: 'spreadsheet_id');
+      final serviceAccountEmail = await storage.read(
+        key: 'service_account_email',
+      );
+      final credentials = await storage.read(
+        key: 'service_account_credentials',
+      );
+
+      if (spreadsheetId != null && spreadsheetId.isNotEmpty) {
+        SheetsConfig.spreadsheetId = spreadsheetId;
+        print('[ExpiryChecker] Loaded spreadsheet ID from storage');
+      }
+
+      // Set service account email from storage if available
+      if (serviceAccountEmail != null && serviceAccountEmail.isNotEmpty) {
+        SheetsConfig.serviceAccountEmail = serviceAccountEmail;
+        print('[ExpiryChecker] Loaded service account email from storage');
+      } else if (credentials != null && credentials.isNotEmpty) {
+        // Extract service account email from credentials if not explicitly set
+        try {
+          final credentialsMap =
+              json.decode(credentials) as Map<String, dynamic>;
+          if (credentialsMap.containsKey('client_email')) {
+            SheetsConfig.serviceAccountEmail =
+                credentialsMap['client_email'] as String;
+            print(
+              '[ExpiryChecker] Extracted service account email from credentials',
+            );
+          }
+        } catch (e) {
+          print('[ExpiryChecker] Error extracting email from credentials: $e');
+        }
+      }
+    } catch (e) {
+      print('[ExpiryChecker] Error loading config from storage: $e');
+    }
+  }
+
   // Check expiry dates and send notifications
   static Future<void> checkExpiryDates() async {
     try {
       print('[ExpiryChecker] Starting expiry check...');
+
+      // Load configuration from storage (important for background context)
+      await _loadConfigFromStorage();
 
       // Check if service is configured
       if (!SheetsConfig.isConfigured) {
@@ -39,16 +87,49 @@ class ExpiryCheckerService {
         return;
       }
 
+      // Initialize Firebase if needed (for background context)
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp();
+          print('[ExpiryChecker] Firebase initialized in background');
+        }
+      } catch (e) {
+        print('[ExpiryChecker] Firebase already initialized or error: $e');
+      }
+
       // Initialize Google Sheets service
       final sheetsService = GoogleSheetsService();
       if (!sheetsService.isInitialized) {
         print('[ExpiryChecker] Initializing Google Sheets service...');
-        final initialized = await sheetsService.initialize();
-        if (!initialized) {
-          print('[ExpiryChecker] Failed to initialize Google Sheets service');
-          return;
+
+        // Try to initialize with credentials from storage
+        const storage = FlutterSecureStorage();
+        final credentials = await storage.read(
+          key: 'service_account_credentials',
+        );
+
+        bool initialized = false;
+        if (credentials != null && credentials.isNotEmpty) {
+          try {
+            initialized = await sheetsService.initializeWithCredentials(
+              credentials,
+            );
+            if (initialized) {
+              print('[ExpiryChecker] Initialized with stored credentials');
+            }
+          } catch (e) {
+            print('[ExpiryChecker] Error initializing with credentials: $e');
+          }
         }
-        print('[ExpiryChecker] Google Sheets service initialized');
+
+        if (!initialized) {
+          initialized = await sheetsService.initialize();
+          if (!initialized) {
+            print('[ExpiryChecker] Failed to initialize Google Sheets service');
+            return;
+          }
+          print('[ExpiryChecker] Google Sheets service initialized');
+        }
       }
 
       // Initialize FCM service (preferred for background notifications)

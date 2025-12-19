@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'services/fcm_service.dart';
+import 'services/expiry_checker_service.dart';
 import 'config/sheets_config.dart';
 import 'screens/home_screen.dart';
 
@@ -80,8 +81,46 @@ Future<void> _initializeServices() async {
   // to avoid platform channel errors. It will be initialized in HomeScreen.
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      // Re-register WorkManager tasks when app resumes
+      _reRegisterWorkManager();
+    }
+  }
+
+  Future<void> _reRegisterWorkManager() async {
+    try {
+      print('[MyApp] App resumed, re-registering WorkManager tasks...');
+      await ExpiryCheckerService.initialize();
+      await ExpiryCheckerService.registerPeriodicTask();
+      print('[MyApp] WorkManager tasks re-registered successfully');
+    } catch (e) {
+      print('[MyApp] Error re-registering WorkManager: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
