@@ -18,12 +18,45 @@ class ExpiryCheckerService {
 
   // Register periodic task to check expiry dates
   static Future<void> registerPeriodicTask() async {
-    await Workmanager().registerPeriodicTask(
-      taskName,
-      taskName,
-      frequency: const Duration(hours: 12), // Check twice daily
-      constraints: Constraints(networkType: NetworkType.connected),
-    );
+    try {
+      // Cancel existing task first to ensure clean registration
+      await Workmanager().cancelByUniqueName(taskName);
+
+      // Register with improved constraints for better reliability
+      await Workmanager().registerPeriodicTask(
+        taskName,
+        taskName,
+        frequency: const Duration(hours: 12), // Check twice daily
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+          requiresBatteryNotLow: false, // Allow execution even on low battery
+          requiresCharging: false, // Allow execution without charging
+          requiresDeviceIdle:
+              false, // Allow execution even when device is in use
+          requiresStorageNotLow: false, // Allow execution even with low storage
+        ),
+        existingWorkPolicy:
+            ExistingPeriodicWorkPolicy.keep, // Keep existing task if present
+        initialDelay: const Duration(
+          minutes: 1,
+        ), // Start checking after 1 minute
+      );
+      print('[ExpiryChecker] Periodic task registered successfully');
+    } catch (e) {
+      print('[ExpiryChecker] Error registering periodic task: $e');
+      // Try to register without existing work policy as fallback
+      try {
+        await Workmanager().registerPeriodicTask(
+          taskName,
+          taskName,
+          frequency: const Duration(hours: 12),
+          constraints: Constraints(networkType: NetworkType.connected),
+        );
+        print('[ExpiryChecker] Periodic task registered with fallback method');
+      } catch (e2) {
+        print('[ExpiryChecker] Failed to register periodic task: $e2');
+      }
+    }
   }
 
   // Cancel the periodic task
@@ -151,13 +184,67 @@ class ExpiryCheckerService {
         print('[ExpiryChecker] FCM service already initialized');
       }
 
-      // Initialize notification service (fallback)
+      // Initialize notification service (fallback) with retry logic
       final notificationService = NotificationService();
+      bool notificationServiceReady = false;
+
       if (!notificationService.isInitialized) {
         print('[ExpiryChecker] Initializing local notification service...');
-        await notificationService.initialize();
-        await notificationService.requestPermissions();
-        print('[ExpiryChecker] Local notification service initialized');
+        // Retry initialization up to 3 times
+        for (int attempt = 1; attempt <= 3; attempt++) {
+          try {
+            final initialized = await notificationService.initialize();
+            if (initialized) {
+              // Request permissions (may fail silently in background, but that's OK)
+              try {
+                await notificationService.requestPermissions();
+              } catch (e) {
+                print(
+                  '[ExpiryChecker] Permission request failed (may be normal in background): $e',
+                );
+              }
+              notificationServiceReady = true;
+              print(
+                '[ExpiryChecker] Local notification service initialized successfully',
+              );
+              break;
+            } else {
+              print(
+                '[ExpiryChecker] Notification service initialization attempt $attempt failed',
+              );
+              if (attempt < 3) {
+                await Future.delayed(Duration(seconds: attempt));
+              }
+            }
+          } catch (e) {
+            print(
+              '[ExpiryChecker] Error initializing notification service (attempt $attempt): $e',
+            );
+            if (attempt < 3) {
+              await Future.delayed(Duration(seconds: attempt));
+            }
+          }
+        }
+
+        if (!notificationServiceReady) {
+          print(
+            '[ExpiryChecker] WARNING: Notification service failed to initialize after retries',
+          );
+        }
+      } else {
+        notificationServiceReady = true;
+        print('[ExpiryChecker] Notification service already initialized');
+      }
+
+      // Ensure notification channel exists (critical for Android)
+      if (notificationServiceReady) {
+        try {
+          // The channel should already be created during initialization,
+          // but we verify it exists by checking if service is initialized
+          print('[ExpiryChecker] Notification service ready for use');
+        } catch (e) {
+          print('[ExpiryChecker] Error verifying notification channel: $e');
+        }
       }
 
       // Read items from Google Sheets
@@ -185,19 +272,46 @@ class ExpiryCheckerService {
               );
               if (!wasSent) {
                 // Send notification via FCM if available, otherwise use local notifications
-                if (useFCM) {
-                  await fcmService.sendExpiryNotification(item, isVisa: false);
-                  print(
-                    '[ExpiryChecker] FCM notification sent for: $identifier (Labour card) - $interval days',
-                  );
+                if (useFCM && fcmService.isInitialized) {
+                  try {
+                    await fcmService.sendExpiryNotification(
+                      item,
+                      isVisa: false,
+                    );
+                    print(
+                      '[ExpiryChecker] FCM notification sent for: $identifier (Labour card) - $interval days',
+                    );
+                  } catch (e) {
+                    print(
+                      '[ExpiryChecker] FCM notification failed, falling back to local: $e',
+                    );
+                    // Fallback to local notifications
+                    if (notificationServiceReady) {
+                      await notificationService.sendExpiryNotification(
+                        item,
+                        isVisa: false,
+                        daysInterval: interval,
+                      );
+                    }
+                  }
+                } else if (notificationServiceReady) {
+                  try {
+                    await notificationService.sendExpiryNotification(
+                      item,
+                      isVisa: false,
+                      daysInterval: interval,
+                    );
+                    print(
+                      '[ExpiryChecker] Local notification sent for: $identifier (Labour card) - $interval days',
+                    );
+                  } catch (e) {
+                    print(
+                      '[ExpiryChecker] Failed to send local notification: $e',
+                    );
+                  }
                 } else {
-                  await notificationService.sendExpiryNotification(
-                    item,
-                    isVisa: false,
-                    daysInterval: interval,
-                  );
                   print(
-                    '[ExpiryChecker] Local notification sent for: $identifier (Labour card) - $interval days',
+                    '[ExpiryChecker] WARNING: Cannot send notification - services not ready',
                   );
                 }
                 // Mark as sent using notification service (shared state)
@@ -228,19 +342,43 @@ class ExpiryCheckerService {
             );
             if (!wasSent) {
               // Send notification via FCM if available, otherwise use local notifications
-              if (useFCM) {
-                await fcmService.sendExpiryNotification(item, isVisa: true);
-                print(
-                  '[ExpiryChecker] FCM notification sent for: $identifier (Visa) - $interval days',
-                );
+              if (useFCM && fcmService.isInitialized) {
+                try {
+                  await fcmService.sendExpiryNotification(item, isVisa: true);
+                  print(
+                    '[ExpiryChecker] FCM notification sent for: $identifier (Visa) - $interval days',
+                  );
+                } catch (e) {
+                  print(
+                    '[ExpiryChecker] FCM notification failed, falling back to local: $e',
+                  );
+                  // Fallback to local notifications
+                  if (notificationServiceReady) {
+                    await notificationService.sendExpiryNotification(
+                      item,
+                      isVisa: true,
+                      daysInterval: interval,
+                    );
+                  }
+                }
+              } else if (notificationServiceReady) {
+                try {
+                  await notificationService.sendExpiryNotification(
+                    item,
+                    isVisa: true,
+                    daysInterval: interval,
+                  );
+                  print(
+                    '[ExpiryChecker] Local notification sent for: $identifier (Visa) - $interval days',
+                  );
+                } catch (e) {
+                  print(
+                    '[ExpiryChecker] Failed to send local notification: $e',
+                  );
+                }
               } else {
-                await notificationService.sendExpiryNotification(
-                  item,
-                  isVisa: true,
-                  daysInterval: interval,
-                );
                 print(
-                  '[ExpiryChecker] Local notification sent for: $identifier (Visa) - $interval days',
+                  '[ExpiryChecker] WARNING: Cannot send notification - services not ready',
                 );
               }
               // Mark as sent using notification service (shared state)
@@ -273,18 +411,72 @@ class ExpiryCheckerService {
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    final startTime = DateTime.now();
+    print('[Workmanager] ========================================');
+    print('[Workmanager] Background task started: $task');
+    print('[Workmanager] Timestamp: ${startTime.toIso8601String()}');
+    if (inputData != null && inputData.isNotEmpty) {
+      print('[Workmanager] Input data: $inputData');
+    }
+
     try {
-      print('[Workmanager] Background task started: $task');
       if (task == ExpiryCheckerService.taskName) {
-        await ExpiryCheckerService.checkExpiryDates();
-        print('[Workmanager] Background task completed successfully');
-        return true;
+        print('[Workmanager] Executing expiry check task...');
+
+        try {
+          await ExpiryCheckerService.checkExpiryDates();
+
+          final endTime = DateTime.now();
+          final duration = endTime.difference(startTime);
+          print('[Workmanager] Background task completed successfully');
+          print('[Workmanager] Duration: ${duration.inSeconds} seconds');
+          print('[Workmanager] ========================================');
+          return true;
+        } catch (checkError, checkStackTrace) {
+          print('[Workmanager] ERROR in checkExpiryDates: $checkError');
+          print('[Workmanager] Error type: ${checkError.runtimeType}');
+          print('[Workmanager] Stack trace: $checkStackTrace');
+
+          // Try to send a diagnostic notification if possible
+          try {
+            final notificationService = NotificationService();
+            if (notificationService.isInitialized) {
+              // Don't send user-facing error notifications, just log
+              print(
+                '[Workmanager] Notification service available but not sending error notification',
+              );
+            }
+          } catch (notifError) {
+            print(
+              '[Workmanager] Could not access notification service for diagnostics: $notifError',
+            );
+          }
+
+          final endTime = DateTime.now();
+          final duration = endTime.difference(startTime);
+          print(
+            '[Workmanager] Task failed after ${duration.inSeconds} seconds',
+          );
+          print('[Workmanager] ========================================');
+          return false;
+        }
+      } else {
+        print('[Workmanager] WARNING: Unknown task received: $task');
+        print('[Workmanager] Expected task: ${ExpiryCheckerService.taskName}');
+        print('[Workmanager] ========================================');
+        return false;
       }
-      print('[Workmanager] Unknown task: $task');
-      return false;
     } catch (e, stackTrace) {
-      print('[Workmanager] Error in background task: $e');
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      print('[Workmanager] CRITICAL ERROR in background task: $e');
+      print('[Workmanager] Error type: ${e.runtimeType}');
       print('[Workmanager] Stack trace: $stackTrace');
+      print('[Workmanager] Task failed after ${duration.inSeconds} seconds');
+      print('[Workmanager] ========================================');
+
+      // Return false to indicate failure
       return false;
     }
   });

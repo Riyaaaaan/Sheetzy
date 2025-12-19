@@ -98,6 +98,55 @@ class NotificationService {
     }
   }
 
+  // Check if notification permissions are granted
+  Future<bool> checkPermissions() async {
+    try {
+      // Android 13+ (API 33+) requires runtime permission check
+      if (Platform.isAndroid) {
+        final androidImplementation = _notifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
+
+        if (androidImplementation != null) {
+          // Check if permissions are granted (Android 13+)
+          try {
+            final granted = await androidImplementation
+                .areNotificationsEnabled();
+            if (granted == true) {
+              print('[NotificationService] Android notifications are enabled');
+              return true;
+            } else {
+              print('[NotificationService] Android notifications are disabled');
+              return false;
+            }
+          } catch (e) {
+            // If check fails, assume permissions are OK for older Android versions
+            print(
+              '[NotificationService] Could not check Android permissions: $e',
+            );
+            return true; // Assume granted for older versions
+          }
+        }
+      }
+
+      // iOS - permissions are checked during initialization
+      // If service is initialized, assume permissions are OK
+      if (Platform.isIOS && _initialized) {
+        return true;
+      }
+
+      // Default: assume permissions are granted if we can't check
+      return _initialized;
+    } catch (e) {
+      print(
+        '[NotificationService] Error checking notification permissions: $e',
+      );
+      // If check fails, assume permissions might be OK
+      return _initialized;
+    }
+  }
+
   // Request notification permissions
   Future<bool> requestPermissions() async {
     try {
@@ -190,6 +239,30 @@ class NotificationService {
     bool isVisa = false,
     int? daysInterval,
   }) async {
+    // Check if service is initialized
+    if (!_initialized) {
+      print(
+        '[NotificationService] Service not initialized, cannot send notification',
+      );
+      return;
+    }
+
+    // Check if permissions are granted (especially important for Android 13+)
+    final hasPermissions = await checkPermissions();
+    if (!hasPermissions) {
+      print(
+        '[NotificationService] Notification permissions not granted, cannot send notification',
+      );
+      // Try to request permissions as a last resort
+      final requested = await requestPermissions();
+      if (!requested) {
+        print(
+          '[NotificationService] Failed to obtain notification permissions',
+        );
+        return;
+      }
+    }
+
     final expiryDate = isVisa ? item.visaExpiry : item.labourCardExpiry;
     final daysUntilExpiry = isVisa
         ? item.visaDaysUntilExpiry

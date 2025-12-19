@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- WAKE_LOCK allows WorkManager to wake device for background tasks -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- FOREGROUND_SERVICE for foreground service notifications (if needed) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is not recommended for Play Store,
+         but users can manually disable battery optimization in settings -->
     
     <application
         android:label="sheetzy"
