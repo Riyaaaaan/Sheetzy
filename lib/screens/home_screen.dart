@@ -13,6 +13,8 @@ import 'settings_screen.dart';
 
 enum SortMode { none, visaExpiry, labourCardExpiry }
 
+enum FilterType { all, visa, labourCard }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   SortMode _sortMode = SortMode.none;
+  FilterType _filterType = FilterType.all;
 
   @override
   void initState() {
@@ -197,31 +200,165 @@ class _HomeScreenState extends State<HomeScreen> {
     return Icons.check_circle_outline_rounded;
   }
 
-  List<ItemModel> _sortItems(List<ItemModel> items, SortMode mode) {
-    if (mode == SortMode.none) {
-      return items;
+  List<ItemModel> _filterAndSortItems(List<ItemModel> items) {
+    // First, filter items based on selected filter type
+    List<ItemModel> filteredItems = items;
+    if (_filterType == FilterType.visa) {
+      filteredItems = items.where((item) => item.visaExpiry != null).toList();
+    } else if (_filterType == FilterType.labourCard) {
+      filteredItems = items
+          .where((item) => item.labourCardExpiry != null)
+          .toList();
     }
 
-    final sorted = List<ItemModel>.from(items);
-    sorted.sort((a, b) {
-      DateTime? dateA, dateB;
-      if (mode == SortMode.visaExpiry) {
-        dateA = a.visaExpiry;
-        dateB = b.visaExpiry;
-      } else if (mode == SortMode.labourCardExpiry) {
-        dateA = a.labourCardExpiry;
-        dateB = b.labourCardExpiry;
+    // Then, separate items into categories
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final List<ItemModel> expiredMore10Days = [];
+    final List<ItemModel> expiredLess10Days = [];
+    final List<ItemModel> notExpired = [];
+
+    for (final item in filteredItems) {
+      // Determine if item is expired based on filter type
+      bool isExpired = false;
+      int? daysExpired;
+
+      if (_filterType == FilterType.visa) {
+        // For visa filter, only check visa expiry
+        if (item.visaExpiry != null) {
+          final expiry = DateTime(
+            item.visaExpiry!.year,
+            item.visaExpiry!.month,
+            item.visaExpiry!.day,
+          );
+          if (expiry.isBefore(today)) {
+            isExpired = true;
+            daysExpired = today.difference(expiry).inDays;
+          }
+        }
+      } else if (_filterType == FilterType.labourCard) {
+        // For labour card filter, only check labour card expiry
+        if (item.labourCardExpiry != null) {
+          final expiry = DateTime(
+            item.labourCardExpiry!.year,
+            item.labourCardExpiry!.month,
+            item.labourCardExpiry!.day,
+          );
+          if (expiry.isBefore(today)) {
+            isExpired = true;
+            daysExpired = today.difference(expiry).inDays;
+          }
+        }
+      } else {
+        // For 'all' filter, check both
+        if (item.isVisaExpired || (item.isCompany != true && item.isExpired)) {
+          isExpired = true;
+          // Calculate which expiry is more severe
+          int? visaDays;
+          int? labourDays;
+          if (item.visaExpiry != null && item.isVisaExpired) {
+            final expiry = DateTime(
+              item.visaExpiry!.year,
+              item.visaExpiry!.month,
+              item.visaExpiry!.day,
+            );
+            visaDays = today.difference(expiry).inDays;
+          }
+          if (item.labourCardExpiry != null &&
+              item.isCompany != true &&
+              item.isExpired) {
+            final expiry = DateTime(
+              item.labourCardExpiry!.year,
+              item.labourCardExpiry!.month,
+              item.labourCardExpiry!.day,
+            );
+            labourDays = today.difference(expiry).inDays;
+          }
+          // Use the larger expiry duration
+          if (visaDays != null && labourDays != null) {
+            daysExpired = visaDays > labourDays ? visaDays : labourDays;
+          } else {
+            daysExpired = visaDays ?? labourDays;
+          }
+        }
       }
 
-      // Handle nulls - put them at the end
-      if (dateA == null && dateB == null) return 0;
-      if (dateA == null) return 1;
-      if (dateB == null) return -1;
+      if (isExpired) {
+        if (daysExpired != null && daysExpired > 10) {
+          expiredMore10Days.add(item);
+        } else {
+          expiredLess10Days.add(item);
+        }
+      } else {
+        notExpired.add(item);
+      }
+    }
 
-      // Ascending order (earliest dates first - items expiring soonest appear first)
-      return dateA.compareTo(dateB);
+    // Sort each category based on filter type
+    _applySortingByFilter(notExpired);
+    _applySortingByFilter(expiredLess10Days);
+    _applySortingByFilter(expiredMore10Days);
+
+    // Combine: not expired + expired <10 days + expired >10 days
+    return [...notExpired, ...expiredLess10Days, ...expiredMore10Days];
+  }
+
+  void _applySortingByFilter(List<ItemModel> items) {
+    items.sort((a, b) {
+      if (_filterType == FilterType.visa) {
+        // Sort by visa expiry in ascending order
+        final dateA = a.visaExpiry;
+        final dateB = b.visaExpiry;
+
+        // Handle nulls - put them at the end
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        return dateA.compareTo(dateB);
+      } else if (_filterType == FilterType.labourCard) {
+        // Sort by labour card expiry in ascending order
+        final dateA = a.labourCardExpiry;
+        final dateB = b.labourCardExpiry;
+
+        // Handle nulls - put them at the end
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        return dateA.compareTo(dateB);
+      } else {
+        // For 'All' filter: sort by earliest expiry (either visa or labour card)
+        DateTime? earliestA;
+        DateTime? earliestB;
+
+        // Find earliest expiry for item A
+        if (a.visaExpiry != null && a.labourCardExpiry != null) {
+          earliestA = a.visaExpiry!.isBefore(a.labourCardExpiry!)
+              ? a.visaExpiry
+              : a.labourCardExpiry;
+        } else {
+          earliestA = a.visaExpiry ?? a.labourCardExpiry;
+        }
+
+        // Find earliest expiry for item B
+        if (b.visaExpiry != null && b.labourCardExpiry != null) {
+          earliestB = b.visaExpiry!.isBefore(b.labourCardExpiry!)
+              ? b.visaExpiry
+              : b.labourCardExpiry;
+        } else {
+          earliestB = b.visaExpiry ?? b.labourCardExpiry;
+        }
+
+        // Handle nulls - put them at the end
+        if (earliestA == null && earliestB == null) return 0;
+        if (earliestA == null) return 1;
+        if (earliestB == null) return -1;
+
+        return earliestA.compareTo(earliestB);
+      }
     });
-    return sorted;
   }
 
   // Trigger debug notifications manually
@@ -520,17 +657,118 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final sortedItems = _sortItems(_items, _sortMode);
+    final filteredAndSortedItems = _filterAndSortItems(_items);
 
-    return RefreshIndicator(
-      onRefresh: _loadItems,
-      child: ListView.builder(
-        itemCount: sortedItems.length,
-        padding: const EdgeInsets.all(16),
-        itemBuilder: (context, index) {
-          final item = sortedItems[index];
-          return _buildModernCard(item);
-        },
+    return Column(
+      children: [
+        // Filter chips
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: Colors.white,
+          child: Row(
+            children: [
+              _buildFilterChip(
+                label: 'All',
+                filterType: FilterType.all,
+                icon: Icons.apps_rounded,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                label: 'Visa',
+                filterType: FilterType.visa,
+                icon: Icons.credit_card_rounded,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                label: 'Labour Card',
+                filterType: FilterType.labourCard,
+                icon: Icons.badge_rounded,
+              ),
+            ],
+          ),
+        ),
+        // List
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _loadItems,
+            child: filteredAndSortedItems.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.filter_list_off_rounded,
+                          size: 56,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No items match this filter',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: filteredAndSortedItems.length,
+                    padding: const EdgeInsets.all(16),
+                    itemBuilder: (context, index) {
+                      final item = filteredAndSortedItems[index];
+                      return _buildModernCard(item);
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required FilterType filterType,
+    required IconData icon,
+  }) {
+    final isSelected = _filterType == filterType;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _filterType = filterType;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
