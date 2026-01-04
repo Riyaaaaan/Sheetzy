@@ -13,7 +13,7 @@ class ExpiryCheckerService {
 
   // Initialize workmanager
   static Future<void> initialize() async {
-    await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    await Workmanager().initialize(callbackDispatcher);
   }
 
   // Register periodic task to check expiry dates

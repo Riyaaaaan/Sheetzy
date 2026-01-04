@@ -445,4 +445,29 @@ class GoogleSheetsService {
     _gsheets = null;
     _initialized = false;
   }
+
+  // Update an existing item in Google Sheets
+  Future<bool> updateItem(ItemModel item) async {
+    if (!isInitialized || !SheetsConfig.isConfigured) {
+      throw Exception('Service not initialized or not configured');
+    }
+
+    if (item.rowIndex == null) {
+      throw Exception('Row index is required to update an item');
+    }
+
+    try {
+      await _ensureSpreadsheetLoaded();
+
+      // Update the row at the specified index
+      final rowData = item.toSheetRow();
+      await _worksheet!.values.insertRow(item.rowIndex!, rowData);
+
+      print('[GoogleSheetsService] Updated item at row ${item.rowIndex}');
+      return true;
+    } catch (e) {
+      print('[GoogleSheetsService] Error updating item: $e');
+      rethrow;
+    }
+  }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import '../models/item_model.dart';
 import '../services/google_sheets_service.dart';
 import '../services/expiry_checker_service.dart';
@@ -538,172 +539,528 @@ class _HomeScreenState extends State<HomeScreen> {
     final statusColor = _getStatusColor(item);
     final statusIcon = _getStatusIcon(item);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return Slidable(
+      key: ValueKey(item.rowIndex ?? item.no ?? item.employeeCompany),
+      endActionPane: ActionPane(
+        motion: const BehindMotion(),
+        extentRatio: 0.25,
+        children: [
+          CustomSlidableAction(
+            onPressed: (context) => _showEditDialog(item),
+            backgroundColor: const Color(0xFF3B82F6),
+            foregroundColor: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(16),
+              bottomRight: Radius.circular(16),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.edit_outlined, size: 24),
+                SizedBox(height: 4),
+                Text(
+                  'Edit',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              // Handle card tap if needed
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row
+                  Row(
+                    children: [
+                      // Status indicator
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(statusIcon, color: statusColor, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      // Name and type
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.employeeCompany ?? item.no ?? 'No name',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            if (item.companyName != null &&
+                                item.companyName!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                item.companyName!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                            if (item.no != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                item.no!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      // Type badge
+                      if (item.isCompany != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: item.isCompany == true
+                                ? const Color(0xFF3B82F6).withOpacity(0.1)
+                                : const Color(0xFF8B5CF6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.isCompany == true ? 'Company' : 'Employee',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: item.isCompany == true
+                                  ? const Color(0xFF3B82F6)
+                                  : const Color(0xFF8B5CF6),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  // Expiry information
+                  const SizedBox(height: 16),
+
+                  // Labour card expiry (only for employees)
+                  if (item.isCompany != true &&
+                      item.labourCardExpiry != null) ...[
+                    _buildExpiryRow(
+                      icon: Icons.badge_outlined,
+                      label: 'Labour Card',
+                      date: app_date_utils.DateUtils.formatDateDisplay(
+                        item.labourCardExpiry!,
+                      ),
+                      daysInfo: _getDaysText(item, isVisa: false),
+                      color: item.isExpired
+                          ? const Color(0xFFEF4444)
+                          : item.isExpiringWithinDays(5)
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Visa expiry
+                  if (item.visaExpiry != null) ...[
+                    _buildExpiryRow(
+                      icon: Icons.travel_explore_outlined,
+                      label: 'Visa',
+                      date: app_date_utils.DateUtils.formatDateDisplay(
+                        item.visaExpiry!,
+                      ),
+                      daysInfo: _getDaysText(item, isVisa: true),
+                      color: item.isVisaExpired
+                          ? const Color(0xFFEF4444)
+                          : item.isVisaExpiringWithinDays(5)
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Contact info
+                  if (item.contact != null && item.contact!.isNotEmpty)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 16,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.contact!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEditDialog(ItemModel item) async {
+    DateTime? labourCardExpiry = item.labourCardExpiry;
+    DateTime? visaExpiry = item.visaExpiry;
+    bool isUpdating = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Title
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.edit_outlined,
+                            color: Color(0xFF3B82F6),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Edit Expiry Dates',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                item.employeeCompany ?? item.no ?? 'Unknown',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Labour Card Expiry
+                    _buildDatePickerTile(
+                      icon: Icons.badge_outlined,
+                      label: 'Labour Card Expiry',
+                      date: labourCardExpiry,
+                      originalDate: item.labourCardExpiry,
+                      onTap: () async {
+                        // Lock to original date - cannot go back to previous dates
+                        final minDate = item.labourCardExpiry ?? DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: labourCardExpiry ?? minDate,
+                          firstDate: minDate,
+                          lastDate: DateTime(2100),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: Color(0xFF3B82F6),
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            labourCardExpiry = picked;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Visa Expiry
+                    _buildDatePickerTile(
+                      icon: Icons.travel_explore_outlined,
+                      label: 'Visa Expiry',
+                      date: visaExpiry,
+                      originalDate: item.visaExpiry,
+                      onTap: () async {
+                        // Lock to original date - cannot go back to previous dates
+                        final minDate = item.visaExpiry ?? DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: visaExpiry ?? minDate,
+                          firstDate: minDate,
+                          lastDate: DateTime(2100),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: Color(0xFF3B82F6),
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            visaExpiry = picked;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isUpdating
+                                ? null
+                                : () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isUpdating
+                                ? null
+                                : () async {
+                                    setModalState(() {
+                                      isUpdating = true;
+                                    });
+
+                                    try {
+                                      final updatedItem = item.copyWith(
+                                        labourCardExpiry: labourCardExpiry,
+                                        visaExpiry: visaExpiry,
+                                      );
+
+                                      await _sheetsService.updateItem(
+                                        updatedItem,
+                                      );
+
+                                      if (mounted) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Item updated successfully',
+                                            ),
+                                            backgroundColor: Color(0xFF10B981),
+                                          ),
+                                        );
+                                        _loadItems();
+                                      }
+                                    } catch (e) {
+                                      setModalState(() {
+                                        isUpdating = false;
+                                      });
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Error updating item: $e',
+                                            ),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: isUpdating
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Save Changes',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDatePickerTile({
+    required IconData icon,
+    required String label,
+    required DateTime? date,
+    required DateTime? originalDate,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            // Handle card tap if needed
-          },
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                // Header row
-                Row(
-                  children: [
-                    // Status indicator
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(statusIcon, color: statusColor, size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    // Name and type
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.employeeCompany ?? item.no ?? 'No name',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          if (item.companyName != null &&
-                              item.companyName!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              item.companyName!,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                          if (item.no != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              item.no!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    // Type badge
-                    if (item.isCompany != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: item.isCompany == true
-                              ? const Color(0xFF3B82F6).withOpacity(0.1)
-                              : const Color(0xFF8B5CF6).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item.isCompany == true ? 'Company' : 'Employee',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: item.isCompany == true
-                                ? const Color(0xFF3B82F6)
-                                : const Color(0xFF8B5CF6),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-
-                // Expiry information
-                const SizedBox(height: 16),
-
-                // Labour card expiry (only for employees)
-                if (item.isCompany != true &&
-                    item.labourCardExpiry != null) ...[
-                  _buildExpiryRow(
-                    icon: Icons.badge_outlined,
-                    label: 'Labour Card',
-                    date: app_date_utils.DateUtils.formatDateDisplay(
-                      item.labourCardExpiry!,
-                    ),
-                    daysInfo: _getDaysText(item, isVisa: false),
-                    color: item.isExpired
-                        ? const Color(0xFFEF4444)
-                        : item.isExpiringWithinDays(5)
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF64748B),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Visa expiry
-                if (item.visaExpiry != null) ...[
-                  _buildExpiryRow(
-                    icon: Icons.travel_explore_outlined,
-                    label: 'Visa',
-                    date: app_date_utils.DateUtils.formatDateDisplay(
-                      item.visaExpiry!,
-                    ),
-                    daysInfo: _getDaysText(item, isVisa: true),
-                    color: item.isVisaExpired
-                        ? const Color(0xFFEF4444)
-                        : item.isVisaExpiringWithinDays(5)
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF64748B),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Contact info
-                if (item.contact != null && item.contact!.isNotEmpty)
-                  Row(
+                Icon(icon, color: const Color(0xFF64748B), size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.phone_outlined,
-                        size: 16,
-                        color: Colors.grey.shade400,
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF94A3B8),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.contact!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF94A3B8),
-                          ),
+                      const SizedBox(height: 4),
+                      Text(
+                        date != null
+                            ? app_date_utils.DateUtils.formatDateDisplay(date)
+                            : 'Not set',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: date != null
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFF94A3B8),
                         ),
                       ),
                     ],
                   ),
+                ),
+                const Icon(
+                  Icons.calendar_today_outlined,
+                  color: Color(0xFF3B82F6),
+                  size: 20,
+                ),
               ],
             ),
           ),
